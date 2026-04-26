@@ -23,3 +23,10 @@
 
 ## Deployment
 - [ ] Create checkpoint for first delivery
+
+## ESP32 Integration
+- [x] Provide ESP32 Arduino code for DHT22 sensor and WiFi HTTP server
+- [x] Update mobile app to fetch real sensor data from ESP32 HTTP endpoint
+- [x] Add configuration screen for ESP32 IP address/hostname
+- [x] Implement error handling for network connectivity issues
+- [ ] Test integration with real ESP32 device
