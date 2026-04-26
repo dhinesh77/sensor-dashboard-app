@@ -26,6 +26,7 @@ WebServer server(80);                          // Web server on port 80
 // ===== Sensor Reading Variables =====
 float temperature = 0.0;
 float humidity = 0.0;
+int wifiSignalStrength = 0; // RSSI in dBm
 unsigned long lastReadTime = 0;
 const unsigned long READ_INTERVAL = 2000;     // Read sensor every 2 seconds
 
@@ -50,8 +51,9 @@ void readSensor() {
     
     temperature = t;
     humidity = h;
-    
-    Serial.print("Temperature: ");
+    wifiSignalStrength = WiFi.RSSI(); // Get WiFi signal strength in dBm
+  }
+}    Serial.print("Temperature: ");
     Serial.print(temperature);
     Serial.print("°C, Humidity: ");
     Serial.print(humidity);
@@ -65,6 +67,7 @@ void handleSensor() {
   StaticJsonDocument<200> doc;
   doc["temperature"] = round(temperature * 10) / 10.0;  // Round to 1 decimal place
   doc["humidity"] = round(humidity);                     // Round to nearest integer
+  doc["rssi"] = wifiSignalStrength;                      // WiFi signal strength in dBm
   doc["unit_temp"] = "C";
   doc["unit_humidity"] = "%";
   doc["timestamp"] = millis();
@@ -88,6 +91,7 @@ void handleStatus() {
   doc["status"] = "running";
   doc["temperature"] = round(temperature * 10) / 10.0;
   doc["humidity"] = round(humidity);
+  doc["rssi"] = wifiSignalStrength;                      // WiFi signal strength in dBm
   doc["wifi_ssid"] = ssid;
   doc["ip_address"] = "192.168.1.33";
   doc["uptime_ms"] = millis();

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { ScrollView, Text, View, Pressable, TextInput, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, TextInput, Alert, Switch } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeContext } from "@/lib/theme-provider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AlertThresholds {
@@ -17,6 +17,7 @@ type ThemeMode = "light" | "dark" | "auto";
 
 const STORAGE_KEY = "alert_thresholds";
 const THEME_STORAGE_KEY = "theme_mode";
+const DEBUG_STORAGE_KEY = "serial_debug_enabled";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -26,16 +27,18 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const systemColorScheme = useColorScheme();
+  const { colorScheme, setColorScheme } = useThemeContext();
   const [thresholds, setThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [tempThresholds, setTempThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [isEditing, setIsEditing] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
+  const [debugEnabled, setDebugEnabled] = useState(false);
 
-  // Load thresholds and theme on mount
+  // Load thresholds, theme, and debug settings on mount
   useEffect(() => {
     loadThresholds();
     loadThemeMode();
+    loadDebugSetting();
   }, []);
 
   const loadThemeMode = async () => {
@@ -43,31 +46,26 @@ export default function SettingsScreen() {
       const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
       if (stored) {
         setThemeMode(stored as ThemeMode);
-        applyTheme(stored as ThemeMode);
+        const mode = stored as ThemeMode;
+        if (mode === "light") {
+          setColorScheme("light");
+        } else if (mode === "dark") {
+          setColorScheme("dark");
+        }
       }
     } catch (error) {
       console.error("Error loading theme mode:", error);
     }
   };
 
-  const applyTheme = (mode: ThemeMode) => {
+  const loadDebugSetting = async () => {
     try {
-      const root = document.documentElement;
-      if (mode === "dark") {
-        root.setAttribute("data-theme", "dark");
-      } else if (mode === "light") {
-        root.removeAttribute("data-theme");
-      } else {
-        // Auto mode - use system preference
-        if (systemColorScheme === "dark") {
-          root.setAttribute("data-theme", "dark");
-        } else {
-          root.removeAttribute("data-theme");
-        }
+      const stored = await AsyncStorage.getItem(DEBUG_STORAGE_KEY);
+      if (stored) {
+        setDebugEnabled(stored === "true");
       }
     } catch (error) {
-      // Silently fail on native platforms where document is not available
-      console.log("Theme application skipped on native platform");
+      console.error("Error loading debug setting:", error);
     }
   };
 
@@ -75,9 +73,22 @@ export default function SettingsScreen() {
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
       setThemeMode(mode);
-      applyTheme(mode);
+      if (mode === "light") {
+        setColorScheme("light");
+      } else if (mode === "dark") {
+        setColorScheme("dark");
+      }
     } catch (error) {
       Alert.alert("Error", "Failed to save theme preference");
+    }
+  };
+
+  const toggleDebug = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(DEBUG_STORAGE_KEY, value.toString());
+      setDebugEnabled(value);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save debug setting");
     }
   };
 
@@ -167,6 +178,26 @@ export default function SettingsScreen() {
     </Pressable>
   );
 
+  const DebugToggle = () => (
+    <View className="bg-surface rounded-2xl p-6 border border-border">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 flex-row items-center gap-3">
+          <MaterialIcons name="bug-report" size={24} color={colors.primary} />
+          <View>
+            <Text className="text-sm font-semibold text-foreground">Serial Debug</Text>
+            <Text className="text-xs text-muted mt-1">Log sensor data to console</Text>
+          </View>
+        </View>
+        <Switch
+          value={debugEnabled}
+          onValueChange={toggleDebug}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={debugEnabled ? colors.primary : colors.muted}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -195,6 +226,11 @@ export default function SettingsScreen() {
                 ? "Theme follows your device settings"
                 : `Theme is set to ${themeMode} mode`}
             </Text>
+          </View>
+
+          {/* Debug Section */}
+          <View className="gap-3">
+            <DebugToggle />
           </View>
 
           {/* Divider */}

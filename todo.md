@@ -44,3 +44,12 @@
 - [x] Implement mDNS hostname resolution in mobile app
 - [x] Add fallback to manual IP if mDNS discovery fails
 - [ ] Add network discovery/scanning feature
+
+## Bug Fixes & New Features
+- [x] Fix theme switching not working in preview
+- [x] Add visual alerts for low/high temperature values
+- [x] Add visual alerts for low/high humidity values
+- [x] Add serial debug enable/disable toggle in Settings
+- [x] Display current IP address on home screen
+- [x] Add WiFi signal strength icon display
+- [x] Update ESP32 code to send WiFi signal strength (RSSI)
