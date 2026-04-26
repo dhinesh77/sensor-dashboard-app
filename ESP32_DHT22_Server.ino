@@ -7,6 +7,13 @@
 const char* ssid = "YOUR_WIFI_SSID";           // Replace with your WiFi name
 const char* password = "YOUR_WIFI_PASSWORD";   // Replace with your WiFi password
 
+// ===== Static IP Configuration =====
+IPAddress local_IP(192, 168, 1, 33);           // Static IP address for ESP32
+IPAddress gateway(192, 168, 1, 1);             // Your WiFi gateway (usually router IP)
+IPAddress subnet(255, 255, 255, 0);            // Subnet mask
+IPAddress primaryDNS(8, 8, 8, 8);              // Google DNS
+IPAddress secondaryDNS(8, 8, 4, 4);            // Google DNS
+
 // ===== DHT22 Sensor Configuration =====
 #define DHTPIN 4                               // GPIO pin where DHT22 data pin is connected
 #define DHTTYPE DHT22                          // DHT 22 (AM2302)
@@ -81,7 +88,7 @@ void handleStatus() {
   doc["temperature"] = round(temperature * 10) / 10.0;
   doc["humidity"] = round(humidity);
   doc["wifi_ssid"] = ssid;
-  doc["ip_address"] = WiFi.localIP().toString();
+  doc["ip_address"] = "192.168.1.33";
   doc["uptime_ms"] = millis();
   
   String response;
@@ -109,6 +116,12 @@ void connectToWiFi() {
   Serial.println(ssid);
   
   WiFi.mode(WIFI_STA);
+  
+  // Configure static IP before connecting
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("Failed to configure static IP");
+  }
+  
   WiFi.begin(ssid, password);
   
   int attempts = 0;
@@ -122,8 +135,9 @@ void connectToWiFi() {
   
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi connected!");
-    Serial.print("IP address: ");
+    Serial.print("Static IP address: ");
     Serial.println(WiFi.localIP());
+    Serial.println("Access the sensor at: http://192.168.1.33/sensor");
   } else {
     Serial.println("Failed to connect to WiFi");
   }
@@ -151,7 +165,9 @@ void setup() {
   // Start web server
   server.begin();
   Serial.println("Web server started on port 80");
-  Serial.println("Access the sensor data at: http://<ESP32_IP>/sensor");
+  Serial.println("\nESP32 is ready! Access endpoints at:");
+  Serial.println("  http://192.168.1.33/sensor");
+  Serial.println("  http://192.168.1.33/status");
   
   // Read sensor once at startup
   readSensor();

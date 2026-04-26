@@ -29,4 +29,8 @@
 - [x] Update mobile app to fetch real sensor data from ESP32 HTTP endpoint
 - [x] Add configuration screen for ESP32 IP address/hostname
 - [x] Implement error handling for network connectivity issues
+- [x] Update ESP32 code with static IP 192.168.1.33
+- [x] Add network page to change ESP32 IP
+- [x] Add settings page for temperature and humidity alert thresholds
+- [x] Implement alert checking on home screen
 - [ ] Test integration with real ESP32 device

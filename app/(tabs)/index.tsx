@@ -26,13 +26,19 @@ export default function HomeScreen() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [esp32IP, setEsp32IP] = useState(DEFAULT_ESP32_IP);
-  const [showIPInput, setShowIPInput] = useState(false);
-  const [tempIP, setTempIP] = useState(DEFAULT_ESP32_IP);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [alertThresholds, setAlertThresholds] = useState({
+    tempMin: 15,
+    tempMax: 30,
+    humidityMin: 30,
+    humidityMax: 70,
+  });
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
   // Load ESP32 IP from storage on mount
   useEffect(() => {
     loadStoredIP();
+    loadAlertThresholds();
     // Auto-refresh sensor data every 5 seconds
     const interval = setInterval(() => {
       refreshSensorData();
@@ -40,43 +46,57 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  // Load alert thresholds from storage
+  const loadAlertThresholds = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("alert_thresholds");
+      if (stored) {
+        setAlertThresholds(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error("Error loading thresholds:", error);
+    }
+  };
+
+  // Check if readings trigger alerts
+  const checkAlerts = (temp: number, humidity: number) => {
+    let alert = null;
+
+    if (temp < alertThresholds.tempMin) {
+      alert = `⚠️ Temperature too low: ${temp.toFixed(1)}°C (min: ${alertThresholds.tempMin}°C)`;
+    } else if (temp > alertThresholds.tempMax) {
+      alert = `⚠️ Temperature too high: ${temp.toFixed(1)}°C (max: ${alertThresholds.tempMax}°C)`;
+    } else if (humidity < alertThresholds.humidityMin) {
+      alert = `⚠️ Humidity too low: ${humidity.toFixed(0)}% (min: ${alertThresholds.humidityMin}%)`;
+    } else if (humidity > alertThresholds.humidityMax) {
+      alert = `⚠️ Humidity too high: ${humidity.toFixed(0)}% (max: ${alertThresholds.humidityMax}%)`;
+    }
+
+    setAlertMessage(alert);
+  };
+
   // Load stored ESP32 IP address
   const loadStoredIP = async () => {
     try {
       const storedIP = await AsyncStorage.getItem(ESP32_IP_STORAGE_KEY);
       if (storedIP) {
         setEsp32IP(storedIP);
-        setTempIP(storedIP);
-      } else {
-        setTempIP(DEFAULT_ESP32_IP);
       }
     } catch (error) {
       console.error("Error loading stored IP:", error);
     }
   };
 
-  // Save ESP32 IP to storage
-  const saveESP32IP = async (ip: string) => {
-    try {
-      await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, ip);
-      setEsp32IP(ip);
-      setShowIPInput(false);
-      setConnectionError(null);
-      // Try to fetch data immediately after setting IP
-      await refreshSensorData(ip);
-    } catch (error) {
-      console.error("Error saving IP:", error);
-    }
-  };
+
 
   // Fetch sensor data from ESP32
   const refreshSensorData = async (ipAddress?: string) => {
     setIsRefreshing(true);
     const ip = ipAddress || esp32IP;
+    console.log("Fetching from:", ip);
 
     try {
       const url = `http://${ip}/sensor`;
-      console.log("Fetching from:", url);
 
       const response = await fetch(url, {
         method: "GET",
@@ -88,11 +108,14 @@ export default function HomeScreen() {
 
       const data = await response.json();
 
+      const temp = data.temperature || 0;
+      const humidity = data.humidity || 0;
       setSensorData({
-        temperature: data.temperature || 0,
-        humidity: data.humidity || 0,
+        temperature: temp,
+        humidity: humidity,
         lastUpdated: new Date(),
       });
+      checkAlerts(temp, humidity);
       setConnectionError(null);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -124,12 +147,7 @@ export default function HomeScreen() {
               </Text>
             </View>
             <View className="flex-row gap-2">
-              <Pressable
-                onPress={() => setShowIPInput(!showIPInput)}
-                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-              >
-                <MaterialIcons name="settings" size={28} color={colors.primary} />
-              </Pressable>
+
               <Pressable
                 onPress={() => refreshSensorData()}
                 disabled={isRefreshing}
@@ -144,40 +162,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* IP Configuration Input */}
-          {showIPInput && (
-            <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
-              <Text className="text-sm font-semibold text-foreground">Configure ESP32 IP Address</Text>
-              <TextInput
-                value={tempIP}
-                onChangeText={setTempIP}
-                placeholder="e.g., 192.168.1.100"
-                placeholderTextColor={colors.muted}
-                className="border border-border rounded-lg p-3 text-foreground"
-                style={{ color: colors.foreground }}
-              />
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={() => saveESP32IP(tempIP)}
-                  className="flex-1 bg-primary rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <Text className="text-white font-semibold">Save</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setShowIPInput(false);
-                    setTempIP(esp32IP);
-                  }}
-                  className="flex-1 bg-surface border border-border rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <Text className="text-foreground font-semibold">Cancel</Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-
           {/* Connection Error Message */}
           {connectionError && (
             <View className="bg-error rounded-2xl p-4 border border-error">
@@ -185,6 +169,13 @@ export default function HomeScreen() {
               <Text className="text-xs text-white mt-2">
                 Make sure ESP32 is running and connected to WiFi. Check the IP address in settings.
               </Text>
+            </View>
+          )}
+
+          {/* Alert Message */}
+          {alertMessage && (
+            <View className="bg-warning rounded-2xl p-4 border border-warning">
+              <Text className="text-sm text-white font-medium">{alertMessage}</Text>
             </View>
           )}
 
