@@ -12,7 +12,9 @@ interface SensorReading {
 }
 
 const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
-const DEFAULT_ESP32_IP = "192.168.1.100"; // Change to your ESP32 IP
+const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
+const DEFAULT_ESP32_IP = "192.168.1.33";
+const DEFAULT_ESP32_HOSTNAME = "sensor-dashboard.local";
 
 /**
  * Dashboard Screen - Displays temperature and humidity sensor readings from ESP32
@@ -26,6 +28,8 @@ export default function HomeScreen() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [esp32IP, setEsp32IP] = useState(DEFAULT_ESP32_IP);
+  const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
+  const [useHostname, setUseHostname] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [alertThresholds, setAlertThresholds] = useState({
     tempMin: 15,
@@ -38,6 +42,7 @@ export default function HomeScreen() {
   // Load ESP32 IP from storage on mount
   useEffect(() => {
     loadStoredIP();
+    loadStoredHostname();
     loadAlertThresholds();
     // Auto-refresh sensor data every 5 seconds
     const interval = setInterval(() => {
@@ -87,16 +92,29 @@ export default function HomeScreen() {
     }
   };
 
+  // Load stored ESP32 hostname
+  const loadStoredHostname = async () => {
+    try {
+      const storedHostname = await AsyncStorage.getItem(ESP32_HOSTNAME_STORAGE_KEY);
+      if (storedHostname) {
+        setEsp32Hostname(storedHostname);
+        setUseHostname(true);
+      }
+    } catch (error) {
+      console.error("Error loading hostname:", error);
+    }
+  };
+
 
 
   // Fetch sensor data from ESP32
-  const refreshSensorData = async (ipAddress?: string) => {
+  const refreshSensorData = async (address?: string) => {
     setIsRefreshing(true);
-    const ip = ipAddress || esp32IP;
-    console.log("Fetching from:", ip);
+    const endpoint = address || (useHostname ? esp32Hostname : esp32IP);
+    console.log("Fetching from:", endpoint);
 
     try {
-      const url = `http://${ip}/sensor`;
+      const url = `http://${endpoint}/sensor`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -143,7 +161,7 @@ export default function HomeScreen() {
                 Last updated: {formatTime(sensorData.lastUpdated)}
               </Text>
               <Text className="text-xs text-muted mt-1">
-                ESP32: {esp32IP}
+                ESP32: {useHostname ? esp32Hostname : esp32IP}
               </Text>
             </View>
             <View className="flex-row gap-2">

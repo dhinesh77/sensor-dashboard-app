@@ -2,6 +2,7 @@
 #include <WebServer.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
 
 // ===== WiFi Configuration =====
 const char* ssid = "YOUR_WIFI_SSID";           // Replace with your WiFi name
@@ -165,9 +166,20 @@ void setup() {
   // Start web server
   server.begin();
   Serial.println("Web server started on port 80");
+  
+  // Setup mDNS
+  if (!MDNS.begin("sensor-dashboard")) {
+    Serial.println("Error setting up mDNS responder!");
+  } else {
+    Serial.println("mDNS responder started");
+    MDNS.addService("http", "tcp", 80);
+  }
+  
   Serial.println("\nESP32 is ready! Access endpoints at:");
   Serial.println("  http://192.168.1.33/sensor");
+  Serial.println("  http://sensor-dashboard.local/sensor (via mDNS)");
   Serial.println("  http://192.168.1.33/status");
+  Serial.println("  http://sensor-dashboard.local/status (via mDNS)");
   
   // Read sensor once at startup
   readSensor();
@@ -177,6 +189,9 @@ void setup() {
 void loop() {
   // Handle incoming HTTP requests
   server.handleClient();
+  
+  // Maintain mDNS
+  MDNS.update();
   
   // Read sensor data
   readSensor();

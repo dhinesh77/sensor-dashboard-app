@@ -3,6 +3,7 @@ import { ScrollView, Text, View, Pressable, TextInput, Alert } from "react-nativ
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AlertThresholds {
@@ -12,7 +13,10 @@ interface AlertThresholds {
   humidityMax: number;
 }
 
+type ThemeMode = "light" | "dark" | "auto";
+
 const STORAGE_KEY = "alert_thresholds";
+const THEME_STORAGE_KEY = "theme_mode";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -22,14 +26,60 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 
 export default function SettingsScreen() {
   const colors = useColors();
+  const systemColorScheme = useColorScheme();
   const [thresholds, setThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [tempThresholds, setTempThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [isEditing, setIsEditing] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
 
-  // Load thresholds on mount
+  // Load thresholds and theme on mount
   useEffect(() => {
     loadThresholds();
+    loadThemeMode();
   }, []);
+
+  const loadThemeMode = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+      if (stored) {
+        setThemeMode(stored as ThemeMode);
+        applyTheme(stored as ThemeMode);
+      }
+    } catch (error) {
+      console.error("Error loading theme mode:", error);
+    }
+  };
+
+  const applyTheme = (mode: ThemeMode) => {
+    try {
+      const root = document.documentElement;
+      if (mode === "dark") {
+        root.setAttribute("data-theme", "dark");
+      } else if (mode === "light") {
+        root.removeAttribute("data-theme");
+      } else {
+        // Auto mode - use system preference
+        if (systemColorScheme === "dark") {
+          root.setAttribute("data-theme", "dark");
+        } else {
+          root.removeAttribute("data-theme");
+        }
+      }
+    } catch (error) {
+      // Silently fail on native platforms where document is not available
+      console.log("Theme application skipped on native platform");
+    }
+  };
+
+  const changeTheme = async (mode: ThemeMode) => {
+    try {
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
+      setThemeMode(mode);
+      applyTheme(mode);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save theme preference");
+    }
+  };
 
   const loadThresholds = async () => {
     try {
@@ -92,15 +142,63 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const ThemeOption = ({ mode, label, icon }: { mode: ThemeMode; label: string; icon: string }) => (
+    <Pressable
+      onPress={() => changeTheme(mode)}
+      className={`flex-1 rounded-lg p-4 items-center border ${
+        themeMode === mode
+          ? "bg-primary/10 border-primary"
+          : "bg-surface border-border"
+      }`}
+      style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+    >
+      <MaterialIcons
+        name={icon as any}
+        size={24}
+        color={themeMode === mode ? colors.primary : colors.muted}
+      />
+      <Text
+        className={`text-xs font-semibold mt-2 ${
+          themeMode === mode ? "text-primary" : "text-foreground"
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 gap-6">
           {/* Header */}
           <View>
-            <Text className="text-3xl font-bold text-foreground">Alert Settings</Text>
-            <Text className="text-sm text-muted mt-2">Set temperature and humidity thresholds</Text>
+            <Text className="text-3xl font-bold text-foreground">Settings</Text>
+            <Text className="text-sm text-muted mt-2">Customize your dashboard experience</Text>
           </View>
+
+          {/* Theme Section */}
+          <View className="gap-3">
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons name="palette" size={24} color={colors.primary} />
+              <Text className="text-lg font-semibold text-foreground">Theme</Text>
+            </View>
+
+            <View className="flex-row gap-3">
+              <ThemeOption mode="light" label="Light" icon="light-mode" />
+              <ThemeOption mode="dark" label="Dark" icon="dark-mode" />
+              <ThemeOption mode="auto" label="Auto" icon="brightness-auto" />
+            </View>
+
+            <Text className="text-xs text-muted">
+              {themeMode === "auto"
+                ? "Theme follows your device settings"
+                : `Theme is set to ${themeMode} mode`}
+            </Text>
+          </View>
+
+          {/* Divider */}
+          <View className="h-px bg-border" />
 
           {/* Temperature Section */}
           <View className="gap-3">
@@ -279,20 +377,6 @@ export default function SettingsScreen() {
               <Text className="text-muted font-semibold">Reset to Defaults</Text>
             </View>
           </Pressable>
-
-          {/* Info Section */}
-          <View className="bg-surface rounded-2xl p-4 border border-border gap-2">
-            <Text className="text-sm font-semibold text-foreground">How Alerts Work</Text>
-            <Text className="text-xs text-muted leading-relaxed">
-              • Alerts are triggered when sensor readings fall outside your set thresholds
-            </Text>
-            <Text className="text-xs text-muted leading-relaxed">
-              • Default: Temperature 15-30°C, Humidity 30-70%
-            </Text>
-            <Text className="text-xs text-muted leading-relaxed">
-              • Adjust based on your comfort and safety requirements
-            </Text>
-          </View>
 
           {/* Spacer */}
           <View className="flex-1" />

@@ -34,3 +34,13 @@
 - [x] Add settings page for temperature and humidity alert thresholds
 - [x] Implement alert checking on home screen
 - [ ] Test integration with real ESP32 device
+
+## Theme & UI Enhancements
+- [x] Add theme selection (light/dark/auto) to Settings page
+- [x] Implement theme persistence in storage
+
+## ESP32 Network Reliability
+- [x] Add mDNS support to ESP32 code for hostname discovery
+- [x] Implement mDNS hostname resolution in mobile app
+- [x] Add fallback to manual IP if mDNS discovery fails
+- [ ] Add network discovery/scanning feature
