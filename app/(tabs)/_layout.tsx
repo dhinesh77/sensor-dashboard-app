@@ -37,6 +37,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="history"
+        options={{
+          title: "History",
+          tabBarIcon: ({ color }) => <MaterialIcons name="show-chart" size={28} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="network"
         options={{
           title: "Network",
