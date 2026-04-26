@@ -3,7 +3,7 @@ import { ScrollView, Text, View, Pressable, TextInput, Alert, Switch } from "rea
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { useThemeContext } from "@/lib/theme-provider";
+import { useThemeContext, type ThemeMode } from "@/lib/theme-provider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AlertThresholds {
@@ -13,11 +13,10 @@ interface AlertThresholds {
   humidityMax: number;
 }
 
-type ThemeMode = "light" | "dark" | "auto";
-
 const STORAGE_KEY = "alert_thresholds";
 const THEME_STORAGE_KEY = "theme_mode";
 const DEBUG_STORAGE_KEY = "serial_debug_enabled";
+const NOTIFICATION_STORAGE_KEY = "notifications_enabled";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -27,36 +26,19 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const { colorScheme, setColorScheme } = useThemeContext();
+  const { themeMode, setThemeMode } = useThemeContext();
   const [thresholds, setThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [tempThresholds, setTempThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [isEditing, setIsEditing] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // Load thresholds, theme, and debug settings on mount
+  // Load thresholds, theme, debug, and notification settings on mount
   useEffect(() => {
     loadThresholds();
-    loadThemeMode();
     loadDebugSetting();
+    loadNotificationSetting();
   }, []);
-
-  const loadThemeMode = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-      if (stored) {
-        setThemeMode(stored as ThemeMode);
-        const mode = stored as ThemeMode;
-        if (mode === "light") {
-          setColorScheme("light");
-        } else if (mode === "dark") {
-          setColorScheme("dark");
-        }
-      }
-    } catch (error) {
-      console.error("Error loading theme mode:", error);
-    }
-  };
 
   const loadDebugSetting = async () => {
     try {
@@ -69,15 +51,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadNotificationSetting = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEY);
+      if (stored) {
+        setNotificationsEnabled(stored === "true");
+      }
+    } catch (error) {
+      console.error("Error loading notification setting:", error);
+    }
+  };
+
   const changeTheme = async (mode: ThemeMode) => {
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
       setThemeMode(mode);
-      if (mode === "light") {
-        setColorScheme("light");
-      } else if (mode === "dark") {
-        setColorScheme("dark");
-      }
     } catch (error) {
       Alert.alert("Error", "Failed to save theme preference");
     }
@@ -89,6 +77,15 @@ export default function SettingsScreen() {
       setDebugEnabled(value);
     } catch (error) {
       Alert.alert("Error", "Failed to save debug setting");
+    }
+  };
+
+  const toggleNotifications = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, value.toString());
+      setNotificationsEnabled(value);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save notification setting");
     }
   };
 
@@ -198,6 +195,26 @@ export default function SettingsScreen() {
     </View>
   );
 
+  const NotificationToggle = () => (
+    <View className="bg-surface rounded-2xl p-6 border border-border">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 flex-row items-center gap-3">
+          <MaterialIcons name="notifications" size={24} color={colors.primary} />
+          <View>
+            <Text className="text-sm font-semibold text-foreground">Alert Notifications</Text>
+            <Text className="text-xs text-muted mt-1">Notify when thresholds are exceeded</Text>
+          </View>
+        </View>
+        <Switch
+          value={notificationsEnabled}
+          onValueChange={toggleNotifications}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={notificationsEnabled ? colors.primary : colors.muted}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -231,6 +248,11 @@ export default function SettingsScreen() {
           {/* Debug Section */}
           <View className="gap-3">
             <DebugToggle />
+          </View>
+
+          {/* Notifications Section */}
+          <View className="gap-3">
+            <NotificationToggle />
           </View>
 
           {/* Divider */}

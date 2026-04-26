@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollView, Text, View, Pressable, ActivityIndicator } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -43,6 +44,8 @@ export default function HomeScreen() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [currentIP, setCurrentIP] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [lastAlertTime, setLastAlertTime] = useState<number>(0);
 
   // Load ESP32 IP from storage on mount
   useEffect(() => {
@@ -50,6 +53,8 @@ export default function HomeScreen() {
     loadStoredHostname();
     loadAlertThresholds();
     loadDebugSetting();
+    loadNotificationSetting();
+    setupNotificationsHandler();
     // Auto-refresh sensor data every 5 seconds
     const interval = setInterval(() => {
       refreshSensorData();
@@ -81,21 +86,83 @@ export default function HomeScreen() {
     }
   };
 
+  // Load notification setting from storage
+  const loadNotificationSetting = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("notifications_enabled");
+      if (stored) {
+        setNotificationsEnabled(stored === "true");
+      }
+    } catch (error) {
+      console.error("Error loading notification setting:", error);
+    }
+  };
+
+  // Setup notifications
+  const setupNotificationsHandler = async () => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        console.log("Notification permission denied");
+      }
+    } catch (error) {
+      console.error("Error setting up notifications:", error);
+    }
+  };
+
+  // Send notification
+  const sendNotification = async (title: string, body: string) => {
+    if (!notificationsEnabled) return;
+
+    const now = Date.now();
+    // Throttle notifications to max 1 per 30 seconds
+    if (now - lastAlertTime < 30000) return;
+
+    setLastAlertTime(now);
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          sound: "default",
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.error("Error sending notification:", error);
+    }
+  };
+
   // Check if readings trigger alerts
   const checkAlerts = (temp: number, humidity: number) => {
     let alert = null;
+    let notificationTitle = "";
+    let notificationBody = "";
 
     if (temp < alertThresholds.tempMin) {
       alert = `⚠️ Temperature too low: ${temp.toFixed(1)}°C (min: ${alertThresholds.tempMin}°C)`;
+      notificationTitle = "Temperature Alert";
+      notificationBody = `Temperature is too low: ${temp.toFixed(1)}°C`;
     } else if (temp > alertThresholds.tempMax) {
       alert = `⚠️ Temperature too high: ${temp.toFixed(1)}°C (max: ${alertThresholds.tempMax}°C)`;
+      notificationTitle = "Temperature Alert";
+      notificationBody = `Temperature is too high: ${temp.toFixed(1)}°C`;
     } else if (humidity < alertThresholds.humidityMin) {
       alert = `⚠️ Humidity too low: ${humidity.toFixed(0)}% (min: ${alertThresholds.humidityMin}%)`;
+      notificationTitle = "Humidity Alert";
+      notificationBody = `Humidity is too low: ${humidity.toFixed(0)}%`;
     } else if (humidity > alertThresholds.humidityMax) {
       alert = `⚠️ Humidity too high: ${humidity.toFixed(0)}% (max: ${alertThresholds.humidityMax}%)`;
+      notificationTitle = "Humidity Alert";
+      notificationBody = `Humidity is too high: ${humidity.toFixed(0)}%`;
     }
 
     setAlertMessage(alert);
+
+    // Send notification if alert is triggered
+    if (alert && notificationTitle) {
+      sendNotification(notificationTitle, notificationBody);
+    }
   };
 
   // Load stored ESP32 IP address
@@ -267,8 +334,8 @@ export default function HomeScreen() {
           {/* Temperature Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 items-center justify-center">
-                <MaterialIcons name="thermostat" size={32} color="white" />
+              <View className="w-16 h-16 rounded-full bg-orange-100 items-center justify-center">
+                <MaterialIcons name="thermostat" size={32} color="#FF6B35" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Temperature</Text>
@@ -283,8 +350,8 @@ export default function HomeScreen() {
           {/* Humidity Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 items-center justify-center">
-                <MaterialIcons name="opacity" size={32} color="white" />
+              <View className="w-16 h-16 rounded-full bg-blue-100 items-center justify-center">
+                <MaterialIcons name="opacity" size={32} color="#0A7EA4" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Humidity</Text>

@@ -4,9 +4,15 @@ import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
 
+export type { ThemeMode };
+
+type ThemeMode = "light" | "dark" | "auto";
+
 type ThemeContextValue = {
   colorScheme: ColorScheme;
   setColorScheme: (scheme: ColorScheme) => void;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -14,6 +20,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme() ?? "light";
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>(systemScheme);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("auto");
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
     nativewindColorScheme.set(scheme);
@@ -34,9 +41,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyScheme(scheme);
   }, [applyScheme]);
 
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeState(mode);
+    if (mode === "auto") {
+      setColorSchemeState(systemScheme);
+      applyScheme(systemScheme);
+    } else {
+      setColorSchemeState(mode);
+      applyScheme(mode);
+    }
+  }, [applyScheme, systemScheme]);
+
   useEffect(() => {
-    applyScheme(colorScheme);
-  }, [applyScheme, colorScheme]);
+    if (themeMode === "auto") {
+      applyScheme(systemScheme);
+    } else {
+      applyScheme(colorScheme);
+    }
+  }, [applyScheme, colorScheme, themeMode, systemScheme]);
 
   const themeVariables = useMemo(
     () =>
@@ -58,10 +80,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     () => ({
       colorScheme,
       setColorScheme,
+      themeMode,
+      setThemeMode,
     }),
-    [colorScheme, setColorScheme],
+    [colorScheme, setColorScheme, themeMode, setThemeMode],
   );
-  console.log(value, themeVariables)
+  // console.log(value, themeVariables)
 
   return (
     <ThemeContext.Provider value={value}>
@@ -77,3 +101,5 @@ export function useThemeContext(): ThemeContextValue {
   }
   return ctx;
 }
+
+

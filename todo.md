@@ -53,3 +53,9 @@
 - [x] Display current IP address on home screen
 - [x] Add WiFi signal strength icon display
 - [x] Update ESP32 code to send WiFi signal strength (RSSI)
+
+## Bug Fixes - Current Sprint
+- [x] Fix dashboard icon colors (restore colored icons)
+- [x] Fix theme switching to auto mode (not switching properly)
+- [x] Add notification alerts for threshold violations
+- [x] Add notification enable/disable toggle in Settings
