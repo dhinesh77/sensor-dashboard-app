@@ -71,13 +71,8 @@ export default function SettingsScreen() {
 
   const changeTheme = async (mode: ThemeMode) => {
     try {
-      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
       setThemeMode(mode);
-      if (mode === "light") {
-        setColorScheme("light");
-      } else if (mode === "dark") {
-        setColorScheme("dark");
-      }
+      setColorScheme(mode);
     } catch (error) {
       Alert.alert("Error", "Failed to save theme preference");
     }
