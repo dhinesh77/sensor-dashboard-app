@@ -89,3 +89,7 @@
 - [x] Display discovered ESP32 devices with connect action
 - [x] Cache scan results in AsyncStorage
 - [x] Handle empty state when no devices found
+
+## Local Development Setup
+- [x] Set up local Supabase environment variables
+- [x] Configure Supabase for local development
