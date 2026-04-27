@@ -1,115 +1,129 @@
-import { useEffect, useState, useCallback } from "react";
-import { ScrollView, Text, View, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import { useEffect, useState } from "react";
+import { ScrollView, Text, View, Pressable, ActivityIndicator } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import * as Notifications from "expo-notifications";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { usePreferences } from "@/hooks/use-preferences";
-import { insertSensorReading, deleteOldReadings } from "@/lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-interface SensorData {
+interface SensorReading {
   temperature: number;
   humidity: number;
-  wifiSignal: number;
+  wifiSignal: number; // RSSI in dBm
   lastUpdated: Date;
 }
 
+const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
+const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
+const DEBUG_STORAGE_KEY = "serial_debug_enabled";
+const DEFAULT_ESP32_IP = "192.168.1.33";
+const DEFAULT_ESP32_HOSTNAME = "sensor-dashboard.local";
+
+/**
+ * Dashboard Screen - Displays temperature and humidity sensor readings from ESP32
+ */
 export default function HomeScreen() {
   const colors = useColors();
-  const { preferences } = usePreferences();
-  const [sensorData, setSensorData] = useState<SensorData>({
+  const [sensorData, setSensorData] = useState<SensorReading>({
     temperature: 0,
     humidity: 0,
     wifiSignal: 0,
     lastUpdated: new Date(),
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [esp32IP, setEsp32IP] = useState(DEFAULT_ESP32_IP);
+  const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
+  const [useHostname, setUseHostname] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [alertThresholds, setAlertThresholds] = useState({
+    tempMin: 15,
+    tempMax: 30,
+    humidityMin: 30,
+    humidityMax: 70,
+  });
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
-  const [lastAlertTime, setLastAlertTime] = useState<number>(0);
-  const [initialLoad, setInitialLoad] = useState(true);
+  const [debugEnabled, setDebugEnabled] = useState(false);
+  const [currentIP, setCurrentIP] = useState<string | null>(null);
 
-  const esp32IP = preferences.esp32_ip;
-  const esp32Hostname = preferences.esp32_hostname;
-  const useHostname = preferences.use_hostname;
-  const alertThresholds = preferences.alert_thresholds;
-  const debugEnabled = preferences.debug_enabled;
-  const notificationsEnabled = preferences.notifications_enabled;
-
+  // Load ESP32 IP from storage on mount
   useEffect(() => {
-    setupNotificationsHandler();
-    cleanupOldReadings();
+    loadStoredIP();
+    loadStoredHostname();
+    loadAlertThresholds();
+    loadDebugSetting();
+    // Auto-refresh sensor data every 5 seconds
+    const interval = setInterval(() => {
+      refreshSensorData();
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (!initialLoad) return;
-    refreshSensorData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on preferences load
-  }, [preferences]);
-
-  const cleanupOldReadings = async () => {
+  // Load alert thresholds from storage
+  const loadAlertThresholds = async () => {
     try {
-      await deleteOldReadings(30);
-    } catch (error) {
-      console.error("Error cleaning up old readings:", error);
-    }
-  };
-
-  const setupNotificationsHandler = async () => {
-    try {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Notification permission denied");
+      const stored = await AsyncStorage.getItem("alert_thresholds");
+      if (stored) {
+        setAlertThresholds(JSON.parse(stored));
       }
     } catch (error) {
-      console.error("Error setting up notifications:", error);
+      console.error("Error loading thresholds:", error);
     }
   };
 
-  const sendNotification = async (title: string, body: string) => {
-    if (!notificationsEnabled) return;
-    const now = Date.now();
-    if (now - lastAlertTime < 30000) return;
-    setLastAlertTime(now);
+  // Load debug setting from storage
+  const loadDebugSetting = async () => {
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: { title, body, sound: "default" },
-        trigger: null,
-      });
+      const stored = await AsyncStorage.getItem(DEBUG_STORAGE_KEY);
+      if (stored) {
+        setDebugEnabled(stored === "true");
+      }
     } catch (error) {
-      console.error("Error sending notification:", error);
+      console.error("Error loading debug setting:", error);
     }
   };
 
+  // Check if readings trigger alerts
   const checkAlerts = (temp: number, humidity: number) => {
     let alert = null;
-    let notificationTitle = "";
-    let notificationBody = "";
 
     if (temp < alertThresholds.tempMin) {
-      alert = `Temperature too low: ${temp.toFixed(1)}°C (min: ${alertThresholds.tempMin}°C)`;
-      notificationTitle = "Temperature Alert";
-      notificationBody = `Temperature is too low: ${temp.toFixed(1)}°C`;
+      alert = `⚠️ Temperature too low: ${temp.toFixed(1)}°C (min: ${alertThresholds.tempMin}°C)`;
     } else if (temp > alertThresholds.tempMax) {
-      alert = `Temperature too high: ${temp.toFixed(1)}°C (max: ${alertThresholds.tempMax}°C)`;
-      notificationTitle = "Temperature Alert";
-      notificationBody = `Temperature is too high: ${temp.toFixed(1)}°C`;
+      alert = `⚠️ Temperature too high: ${temp.toFixed(1)}°C (max: ${alertThresholds.tempMax}°C)`;
     } else if (humidity < alertThresholds.humidityMin) {
-      alert = `Humidity too low: ${humidity.toFixed(0)}% (min: ${alertThresholds.humidityMin}%)`;
-      notificationTitle = "Humidity Alert";
-      notificationBody = `Humidity is too low: ${humidity.toFixed(0)}%`;
+      alert = `⚠️ Humidity too low: ${humidity.toFixed(0)}% (min: ${alertThresholds.humidityMin}%)`;
     } else if (humidity > alertThresholds.humidityMax) {
-      alert = `Humidity too high: ${humidity.toFixed(0)}% (max: ${alertThresholds.humidityMax}%)`;
-      notificationTitle = "Humidity Alert";
-      notificationBody = `Humidity is too high: ${humidity.toFixed(0)}%`;
+      alert = `⚠️ Humidity too high: ${humidity.toFixed(0)}% (max: ${alertThresholds.humidityMax}%)`;
     }
 
     setAlertMessage(alert);
-    if (alert && notificationTitle) {
-      sendNotification(notificationTitle, notificationBody);
+  };
+
+  // Load stored ESP32 IP address
+  const loadStoredIP = async () => {
+    try {
+      const storedIP = await AsyncStorage.getItem(ESP32_IP_STORAGE_KEY);
+      if (storedIP) {
+        setEsp32IP(storedIP);
+      }
+    } catch (error) {
+      console.error("Error loading stored IP:", error);
     }
   };
 
+  // Load stored ESP32 hostname
+  const loadStoredHostname = async () => {
+    try {
+      const storedHostname = await AsyncStorage.getItem(ESP32_HOSTNAME_STORAGE_KEY);
+      if (storedHostname) {
+        setEsp32Hostname(storedHostname);
+        setUseHostname(true);
+      }
+    } catch (error) {
+      console.error("Error loading hostname:", error);
+    }
+  };
+
+  // Get WiFi signal strength icon
   const getWiFiIcon = (rssi: number): any => {
     if (rssi === 0) return "wifi-off";
     if (rssi > -50) return "signal-cellular-4-bar";
@@ -118,6 +132,7 @@ export default function HomeScreen() {
     return "signal-cellular-1-bar";
   };
 
+  // Get WiFi signal strength color
   const getWiFiColor = (rssi: number): string => {
     if (rssi === 0) return colors.muted;
     if (rssi > -50) return colors.success;
@@ -126,19 +141,25 @@ export default function HomeScreen() {
     return colors.error;
   };
 
-  const refreshSensorData = useCallback(async () => {
+  // Fetch sensor data from ESP32
+  const refreshSensorData = async (address?: string) => {
     setIsRefreshing(true);
-    const endpoint = useHostname ? esp32Hostname : esp32IP;
+    const endpoint = address || (useHostname ? esp32Hostname : esp32IP);
+    console.log("Fetching from:", endpoint);
 
     try {
       const url = `http://${endpoint}/sensor`;
-      const response = await fetch(url, { method: "GET" });
+
+      const response = await fetch(url, {
+        method: "GET",
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP Error: ${response.status}`);
       }
 
       const data = await response.json();
+
       const temp = data.temperature || 0;
       const humidity = data.humidity || 0;
       const rssi = data.rssi || 0;
@@ -150,13 +171,13 @@ export default function HomeScreen() {
         lastUpdated: new Date(),
       });
 
+      // Set current IP from the endpoint
+      setCurrentIP(endpoint);
+
+      // Log to console if debug is enabled
       if (debugEnabled) {
         console.log(`[DEBUG] Temperature: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
       }
-
-      insertSensorReading(temp, humidity, rssi).catch((err) =>
-        console.error("Failed to save reading:", err)
-      );
 
       checkAlerts(temp, humidity);
       setConnectionError(null);
@@ -166,29 +187,17 @@ export default function HomeScreen() {
       setConnectionError(`Connection failed: ${errorMessage}`);
     } finally {
       setIsRefreshing(false);
-      setInitialLoad(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- checkAlerts is stable enough for this use case
-  }, [useHostname, esp32Hostname, esp32IP, debugEnabled, alertThresholds]);
+  };
 
+  // Format time display
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  const currentEndpoint = useHostname ? esp32Hostname : esp32IP;
-
   return (
     <ScreenContainer className="p-6">
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refreshSensorData}
-            tintColor={colors.primary}
-          />
-        }
-      >
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="flex-1 gap-6">
           {/* Header */}
           <View className="flex-row items-center justify-between">
@@ -198,29 +207,23 @@ export default function HomeScreen() {
                 Last updated: {formatTime(sensorData.lastUpdated)}
               </Text>
               <Text className="text-xs text-muted mt-1">
-                ESP32: {currentEndpoint}
+                ESP32: {useHostname ? esp32Hostname : esp32IP}
               </Text>
             </View>
-            <Pressable
-              onPress={() => refreshSensorData()}
-              disabled={isRefreshing}
-              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-            >
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <MaterialIcons name="refresh" size={28} color={colors.primary} />
-              )}
-            </Pressable>
-          </View>
-
-          {/* Initial Loading State */}
-          {initialLoad && connectionError === null && sensorData.temperature === 0 && (
-            <View className="items-center py-12 gap-3">
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text className="text-sm text-muted">Connecting to sensor...</Text>
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => refreshSensorData()}
+                disabled={isRefreshing}
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+              >
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <MaterialIcons name="refresh" size={28} color={colors.primary} />
+                )}
+              </Pressable>
             </View>
-          )}
+          </View>
 
           {/* Network Status Card */}
           <View className="bg-surface rounded-2xl p-4 border border-border">
@@ -228,7 +231,7 @@ export default function HomeScreen() {
               <View className="flex-1">
                 <Text className="text-xs text-muted font-medium">Current IP Address</Text>
                 <Text className="text-sm font-semibold text-foreground mt-1">
-                  {currentEndpoint}
+                  {currentIP || (useHostname ? esp32Hostname : esp32IP)}
                 </Text>
               </View>
               <View className="items-center gap-1">
@@ -246,9 +249,9 @@ export default function HomeScreen() {
 
           {/* Connection Error Message */}
           {connectionError && (
-            <View className="rounded-2xl p-4 border" style={{ backgroundColor: "rgba(239,68,68,0.1)", borderColor: colors.error }}>
-              <Text className="text-sm font-medium" style={{ color: colors.error }}>{connectionError}</Text>
-              <Text className="text-xs mt-2" style={{ color: colors.muted }}>
+            <View className="bg-error rounded-2xl p-4 border border-error">
+              <Text className="text-sm text-white font-medium">{connectionError}</Text>
+              <Text className="text-xs text-white mt-2">
                 Make sure ESP32 is running and connected to WiFi. Check the IP address in settings.
               </Text>
             </View>
@@ -256,16 +259,16 @@ export default function HomeScreen() {
 
           {/* Alert Message */}
           {alertMessage && (
-            <View className="rounded-2xl p-4 border" style={{ backgroundColor: "rgba(245,158,11,0.1)", borderColor: colors.warning }}>
-              <Text className="text-sm font-medium" style={{ color: colors.warning }}>{alertMessage}</Text>
+            <View className="bg-warning rounded-2xl p-4 border border-warning">
+              <Text className="text-sm text-white font-medium">{alertMessage}</Text>
             </View>
           )}
 
           {/* Temperature Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(255,107,53,0.1)" }}>
-                <MaterialIcons name="thermostat" size={32} color="#FF6B35" />
+              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 items-center justify-center">
+                <MaterialIcons name="thermostat" size={32} color="white" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Temperature</Text>
@@ -280,8 +283,8 @@ export default function HomeScreen() {
           {/* Humidity Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(10,126,164,0.1)" }}>
-                <MaterialIcons name="opacity" size={32} color="#0A7EA4" />
+              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 items-center justify-center">
+                <MaterialIcons name="opacity" size={32} color="white" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Humidity</Text>

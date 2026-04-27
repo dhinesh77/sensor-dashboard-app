@@ -52,8 +52,8 @@ void readSensor() {
     temperature = t;
     humidity = h;
     wifiSignalStrength = WiFi.RSSI(); // Get WiFi signal strength in dBm
-  
-    Serial.print("Temperature: ");
+  }
+}    Serial.print("Temperature: ");
     Serial.print(temperature);
     Serial.print("°C, Humidity: ");
     Serial.print(humidity);
@@ -195,7 +195,7 @@ void loop() {
   server.handleClient();
   
   // Maintain mDNS
-  //MDNS.update();
+  MDNS.update();
   
   // Read sensor data
   readSensor();

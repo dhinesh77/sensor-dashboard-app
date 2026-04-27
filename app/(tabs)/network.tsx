@@ -1,45 +1,53 @@
-import { useState, useEffect, useRef } from "react";
-import { ScrollView, Text, View, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { useState, useEffect } from "react";
+import { ScrollView, Text, View, Pressable, TextInput, Alert } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { usePreferences } from "@/hooks/use-preferences";
-import { scanNetwork, getDefaultSubnet, type DiscoveredDevice } from "@/lib/network-scanner";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const LAST_SCAN_KEY = "last_scan_results";
+const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
+const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
+const DEFAULT_ESP32_IP = "192.168.1.33";
+const DEFAULT_ESP32_HOSTNAME = "sensor-dashboard.local";
 
 export default function NetworkScreen() {
   const colors = useColors();
-  const { preferences, updatePreferences } = usePreferences();
-  const [tempIP, setTempIP] = useState(preferences.esp32_ip);
-  const [tempHostname, setTempHostname] = useState(preferences.esp32_hostname);
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [esp32IP, setEsp32IP] = useState(DEFAULT_ESP32_IP);
+  const [tempIP, setTempIP] = useState(DEFAULT_ESP32_IP);
   const [isEditing, setIsEditing] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [useHostname, setUseHostname] = useState(true);
+  const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
+  const [tempHostname, setTempHostname] = useState(DEFAULT_ESP32_HOSTNAME);
 
-  const [scanning, setScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState({ scanned: 0, total: 0, found: 0 });
-  const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
-  const [subnet, setSubnet] = useState(getDefaultSubnet());
-  const abortRef = useRef<AbortController | null>(null);
-
+  // Load stored IP and hostname on mount
   useEffect(() => {
-    loadLastScanResults();
+    loadStoredIP();
+    loadStoredHostname();
   }, []);
 
-  useEffect(() => {
-    setTempIP(preferences.esp32_ip);
-    setTempHostname(preferences.esp32_hostname);
-  }, [preferences]);
-
-  const loadLastScanResults = async () => {
+  const loadStoredIP = async () => {
     try {
-      const stored = await AsyncStorage.getItem(LAST_SCAN_KEY);
-      if (stored) {
-        setDiscoveredDevices(JSON.parse(stored));
+      const storedIP = await AsyncStorage.getItem(ESP32_IP_STORAGE_KEY);
+      if (storedIP) {
+        setEsp32IP(storedIP);
+        setTempIP(storedIP);
       }
     } catch (error) {
-      console.error("Error loading scan results:", error);
+      console.error("Error loading IP:", error);
+    }
+  };
+
+  const loadStoredHostname = async () => {
+    try {
+      const storedHostname = await AsyncStorage.getItem(ESP32_HOSTNAME_STORAGE_KEY);
+      if (storedHostname) {
+        setEsp32Hostname(storedHostname);
+        setTempHostname(storedHostname);
+        setUseHostname(true);
+      }
+    } catch (error) {
+      console.error("Error loading hostname:", error);
     }
   };
 
@@ -47,74 +55,68 @@ export default function NetworkScreen() {
     setConnectionStatus("testing");
     try {
       const response = await fetch(`http://${address}/sensor`, { method: "GET" });
-      setConnectionStatus(response.ok ? "success" : "error");
-    } catch {
+      if (response.ok) {
+        setConnectionStatus("success");
+        Alert.alert("Success", `Connected to ESP32 at ${address}`);
+      } else {
+        setConnectionStatus("error");
+        Alert.alert("Error", `ESP32 responded with status ${response.status}`);
+      }
+    } catch (error) {
       setConnectionStatus("error");
+      Alert.alert("Error", `Failed to connect to ${address}. Make sure ESP32 is online.`);
     }
   };
 
   const saveIP = async () => {
-    if (!tempIP.trim()) return;
-    await updatePreferences({ esp32_ip: tempIP, use_hostname: false });
-    setIsEditing(false);
-    await testConnection(tempIP);
+    if (!tempIP.trim()) {
+      Alert.alert("Error", "Please enter a valid IP address");
+      return;
+    }
+
+    try {
+      await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, tempIP);
+      setEsp32IP(tempIP);
+      setUseHostname(false);
+      setIsEditing(false);
+      await testConnection(tempIP);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save IP address");
+    }
   };
 
   const saveHostname = async () => {
-    if (!tempHostname.trim()) return;
-    await updatePreferences({ esp32_hostname: tempHostname, use_hostname: true });
-    setIsEditing(false);
-    await testConnection(tempHostname);
-  };
-
-  const connectToDevice = async (device: DiscoveredDevice) => {
-    await updatePreferences({ esp32_ip: device.ip, use_hostname: false });
-    setTempIP(device.ip);
-    await testConnection(device.ip);
-  };
-
-  const startScan = async () => {
-    setScanning(true);
-    setScanProgress({ scanned: 0, total: 254, found: 0 });
-    setDiscoveredDevices([]);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const devices = await scanNetwork(
-      subnet,
-      (scanned, total, found) => {
-        setScanProgress({ scanned, total, found });
-      },
-      controller.signal
-    );
-
-    setDiscoveredDevices(devices);
-    setScanning(false);
-    abortRef.current = null;
+    if (!tempHostname.trim()) {
+      Alert.alert("Error", "Please enter a valid hostname");
+      return;
+    }
 
     try {
-      await AsyncStorage.setItem(LAST_SCAN_KEY, JSON.stringify(devices));
-    } catch {}
-  };
-
-  const cancelScan = () => {
-    abortRef.current?.abort();
-    setScanning(false);
+      await AsyncStorage.setItem(ESP32_HOSTNAME_STORAGE_KEY, tempHostname);
+      setEsp32Hostname(tempHostname);
+      setUseHostname(true);
+      setIsEditing(false);
+      await testConnection(tempHostname);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save hostname");
+    }
   };
 
   const resetToDefault = async () => {
-    await updatePreferences({
-      esp32_hostname: "sensor-dashboard.local",
-      esp32_ip: "192.168.1.33",
-      use_hostname: true,
-    });
-    setTempHostname("sensor-dashboard.local");
-    setTempIP("192.168.1.33");
-    setIsEditing(false);
+    Alert.alert("Reset Settings", "Reset to default hostname (sensor-dashboard.local)?", [
+      { text: "Cancel", onPress: () => {} },
+      {
+        text: "Reset",
+        onPress: async () => {
+          setTempHostname(DEFAULT_ESP32_HOSTNAME);
+          await AsyncStorage.setItem(ESP32_HOSTNAME_STORAGE_KEY, DEFAULT_ESP32_HOSTNAME);
+          setEsp32Hostname(DEFAULT_ESP32_HOSTNAME);
+          setUseHostname(true);
+          setIsEditing(false);
+        },
+      },
+    ]);
   };
-
-  const currentEndpoint = preferences.use_hostname ? preferences.esp32_hostname : preferences.esp32_ip;
 
   return (
     <ScreenContainer className="p-6">
@@ -132,9 +134,11 @@ export default function NetworkScreen() {
             <View className="flex-row items-center gap-3">
               <MaterialIcons name="router" size={32} color={colors.primary} />
               <View className="flex-1">
-                <Text className="text-2xl font-bold text-foreground">{currentEndpoint}</Text>
+                <Text className="text-2xl font-bold text-foreground">
+                  {useHostname ? esp32Hostname : esp32IP}
+                </Text>
                 <Text className="text-xs text-muted mt-1">
-                  {preferences.use_hostname ? "Using mDNS" : "Using IP Address"}
+                  {useHostname ? "Using mDNS" : "Using IP Address"}
                 </Text>
               </View>
             </View>
@@ -143,21 +147,13 @@ export default function NetworkScreen() {
           {/* Connection Status */}
           {connectionStatus !== "idle" && (
             <View
-              className="rounded-2xl p-4 border"
-              style={{
-                backgroundColor:
-                  connectionStatus === "success"
-                    ? "rgba(34,197,94,0.1)"
-                    : connectionStatus === "testing"
-                      ? "rgba(10,126,164,0.1)"
-                      : "rgba(239,68,68,0.1)",
-                borderColor:
-                  connectionStatus === "success"
-                    ? colors.success
-                    : connectionStatus === "testing"
-                      ? colors.primary
-                      : colors.error,
-              }}
+              className={`rounded-2xl p-4 border ${
+                connectionStatus === "success"
+                  ? "bg-success/10 border-success"
+                  : connectionStatus === "testing"
+                    ? "bg-primary/10 border-primary"
+                    : "bg-error/10 border-error"
+              }`}
             >
               <View className="flex-row items-center gap-2">
                 <MaterialIcons
@@ -178,15 +174,13 @@ export default function NetworkScreen() {
                   }
                 />
                 <Text
-                  className="text-sm font-medium"
-                  style={{
-                    color:
-                      connectionStatus === "success"
-                        ? colors.success
-                        : connectionStatus === "testing"
-                          ? colors.primary
-                          : colors.error,
-                  }}
+                  className={`text-sm font-medium ${
+                    connectionStatus === "success"
+                      ? "text-success"
+                      : connectionStatus === "testing"
+                        ? "text-primary"
+                        : "text-error"
+                  }`}
                 >
                   {connectionStatus === "success"
                     ? "Connected successfully"
@@ -197,104 +191,6 @@ export default function NetworkScreen() {
               </View>
             </View>
           )}
-
-          {/* Network Scanner Section */}
-          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons name="radar" size={20} color={colors.primary} />
-              <Text className="text-sm font-semibold text-foreground">Network Scanner</Text>
-            </View>
-
-            <View className="gap-2">
-              <Text className="text-xs text-muted font-medium">Subnet</Text>
-              <TextInput
-                value={subnet}
-                onChangeText={setSubnet}
-                placeholder="e.g., 192.168.1"
-                placeholderTextColor={colors.muted}
-                className="border border-border rounded-lg p-3 text-foreground"
-                style={{ color: colors.foreground }}
-                editable={!scanning}
-              />
-            </View>
-
-            {scanning ? (
-              <View className="gap-3">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-xs text-muted">
-                    Scanning... found {scanProgress.found} device{scanProgress.found !== 1 ? "s" : ""}
-                  </Text>
-                  <Pressable onPress={cancelScan}>
-                    <Text className="text-xs font-semibold" style={{ color: colors.error }}>Cancel</Text>
-                  </Pressable>
-                </View>
-                <View className="h-2 rounded-full bg-border overflow-hidden">
-                  <View
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${(scanProgress.scanned / scanProgress.total) * 100}%`,
-                      backgroundColor: colors.primary,
-                    }}
-                  />
-                </View>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : (
-              <Pressable
-                onPress={startScan}
-                className="bg-primary rounded-lg p-3 items-center"
-                style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-              >
-                <View className="flex-row items-center gap-2">
-                  <MaterialIcons name="search" size={16} color="white" />
-                  <Text className="text-white font-semibold">Scan Network</Text>
-                </View>
-              </Pressable>
-            )}
-
-            {/* Discovered Devices */}
-            {discoveredDevices.length > 0 && (
-              <View className="gap-2 mt-2">
-                <Text className="text-xs font-semibold text-muted">
-                  Discovered Devices ({discoveredDevices.length})
-                </Text>
-                {discoveredDevices.map((device) => (
-                  <Pressable
-                    key={device.ip}
-                    onPress={() => connectToDevice(device)}
-                    className="border border-border rounded-xl p-4 flex-row items-center justify-between"
-                    style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1, backgroundColor: "rgba(10,126,164,0.05)" }]}
-                  >
-                    <View className="flex-row items-center gap-3 flex-1">
-                      <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(10,126,164,0.1)" }}>
-                        <MaterialIcons name="router" size={20} color={colors.primary} />
-                      </View>
-                      <View>
-                        <Text className="text-sm font-semibold text-foreground">{device.name}</Text>
-                        <Text className="text-xs text-muted">{device.ip}</Text>
-                      </View>
-                    </View>
-                    <View className="items-end">
-                      <Text className="text-xs text-muted">
-                        {device.temperature.toFixed(1)}°C / {device.humidity.toFixed(0)}%
-                      </Text>
-                      <Text className="text-xs font-semibold mt-1" style={{ color: colors.primary }}>
-                        Connect
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            {!scanning && discoveredDevices.length === 0 && scanProgress.total > 0 && (
-              <View className="items-center py-4">
-                <MaterialIcons name="wifi-off" size={32} color={colors.muted} />
-                <Text className="text-sm text-muted mt-2">No ESP32 devices found</Text>
-                <Text className="text-xs text-muted mt-1">Make sure your ESP32 is powered on and connected to WiFi</Text>
-              </View>
-            )}
-          </View>
 
           {/* Hostname Section */}
           <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
@@ -326,7 +222,7 @@ export default function NetworkScreen() {
                 <Pressable
                   onPress={() => {
                     setIsEditing(false);
-                    setTempHostname(preferences.esp32_hostname);
+                    setTempHostname(esp32Hostname);
                   }}
                   className="flex-1 bg-surface border border-border rounded-lg p-3 items-center"
                   style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
@@ -347,7 +243,7 @@ export default function NetworkScreen() {
                   </View>
                 </Pressable>
                 <Pressable
-                  onPress={() => testConnection(preferences.esp32_hostname)}
+                  onPress={() => testConnection(esp32Hostname)}
                   disabled={connectionStatus === "testing"}
                   className="flex-1 bg-surface border border-border rounded-lg p-3 items-center"
                   style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
@@ -420,16 +316,16 @@ export default function NetworkScreen() {
           <View className="bg-surface rounded-2xl p-4 border border-border gap-2">
             <Text className="text-sm font-semibold text-foreground">How It Works</Text>
             <Text className="text-xs text-muted leading-relaxed">
-              Network Scanner probes all IPs on your subnet for ESP32 devices
+              • mDNS (Multicast DNS) lets you access ESP32 by hostname instead of IP
             </Text>
             <Text className="text-xs text-muted leading-relaxed">
-              mDNS (Multicast DNS) lets you access ESP32 by hostname instead of IP
+              • Default hostname: sensor-dashboard.local
             </Text>
             <Text className="text-xs text-muted leading-relaxed">
-              Default hostname: sensor-dashboard.local
+              • If mDNS fails, the app falls back to the manual IP address
             </Text>
             <Text className="text-xs text-muted leading-relaxed">
-              Both devices must be on the same WiFi network
+              • Both devices must be on the same WiFi network
             </Text>
           </View>
 

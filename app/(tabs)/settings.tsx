@@ -3,8 +3,8 @@ import { ScrollView, Text, View, Pressable, TextInput, Alert, Switch } from "rea
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { useThemeContext, type ThemeMode } from "@/lib/theme-provider";
-import { usePreferences } from "@/hooks/use-preferences";
+import { useThemeContext } from "@/lib/theme-provider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AlertThresholds {
   tempMin: number;
@@ -13,6 +13,11 @@ interface AlertThresholds {
   humidityMax: number;
 }
 
+type ThemeMode = "light" | "dark" | "auto";
+
+const STORAGE_KEY = "alert_thresholds";
+const THEME_STORAGE_KEY = "theme_mode";
+const DEBUG_STORAGE_KEY = "serial_debug_enabled";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -22,31 +27,86 @@ const DEFAULT_THRESHOLDS: AlertThresholds = {
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const { themeMode, setThemeMode } = useThemeContext();
-  const { preferences, updatePreferences } = usePreferences();
-  const [thresholds, setThresholds] = useState<AlertThresholds>(preferences.alert_thresholds);
-  const [tempThresholds, setTempThresholds] = useState<AlertThresholds>(preferences.alert_thresholds);
+  const { colorScheme, setColorScheme } = useThemeContext();
+  const [thresholds, setThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
+  const [tempThresholds, setTempThresholds] = useState<AlertThresholds>(DEFAULT_THRESHOLDS);
   const [isEditing, setIsEditing] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
+  const [debugEnabled, setDebugEnabled] = useState(false);
 
+  // Load thresholds, theme, and debug settings on mount
   useEffect(() => {
-    setThresholds(preferences.alert_thresholds);
-    setTempThresholds(preferences.alert_thresholds);
-  }, [preferences.alert_thresholds]);
+    loadThresholds();
+    loadThemeMode();
+    loadDebugSetting();
+  }, []);
+
+  const loadThemeMode = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+      if (stored) {
+        setThemeMode(stored as ThemeMode);
+        const mode = stored as ThemeMode;
+        if (mode === "light") {
+          setColorScheme("light");
+        } else if (mode === "dark") {
+          setColorScheme("dark");
+        }
+      }
+    } catch (error) {
+      console.error("Error loading theme mode:", error);
+    }
+  };
+
+  const loadDebugSetting = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(DEBUG_STORAGE_KEY);
+      if (stored) {
+        setDebugEnabled(stored === "true");
+      }
+    } catch (error) {
+      console.error("Error loading debug setting:", error);
+    }
+  };
 
   const changeTheme = async (mode: ThemeMode) => {
-    setThemeMode(mode);
-    await updatePreferences({ theme_mode: mode });
+    try {
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
+      setThemeMode(mode);
+      if (mode === "light") {
+        setColorScheme("light");
+      } else if (mode === "dark") {
+        setColorScheme("dark");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to save theme preference");
+    }
   };
 
   const toggleDebug = async (value: boolean) => {
-    await updatePreferences({ debug_enabled: value });
+    try {
+      await AsyncStorage.setItem(DEBUG_STORAGE_KEY, value.toString());
+      setDebugEnabled(value);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save debug setting");
+    }
   };
 
-  const toggleNotifications = async (value: boolean) => {
-    await updatePreferences({ notifications_enabled: value });
+  const loadThresholds = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setThresholds(parsed);
+        setTempThresholds(parsed);
+      }
+    } catch (error) {
+      console.error("Error loading thresholds:", error);
+    }
   };
 
   const saveThresholds = async () => {
+    // Validate inputs
     if (
       isNaN(tempThresholds.tempMin) ||
       isNaN(tempThresholds.tempMax) ||
@@ -67,20 +127,24 @@ export default function SettingsScreen() {
       return;
     }
 
-    await updatePreferences({ alert_thresholds: tempThresholds });
-    setThresholds(tempThresholds);
-    setIsEditing(false);
-    Alert.alert("Success", "Alert thresholds saved");
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tempThresholds));
+      setThresholds(tempThresholds);
+      setIsEditing(false);
+      Alert.alert("Success", "Alert thresholds saved");
+    } catch (error) {
+      Alert.alert("Error", "Failed to save thresholds");
+    }
   };
 
   const resetToDefaults = () => {
     Alert.alert("Reset Settings", "Reset all thresholds to default values?", [
-      { text: "Cancel", style: "cancel" },
+      { text: "Cancel", onPress: () => {} },
       {
         text: "Reset",
         onPress: async () => {
-          await updatePreferences({ alert_thresholds: DEFAULT_THRESHOLDS });
           setTempThresholds(DEFAULT_THRESHOLDS);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_THRESHOLDS));
           setThresholds(DEFAULT_THRESHOLDS);
           setIsEditing(false);
           Alert.alert("Success", "Thresholds reset to defaults");
@@ -114,6 +178,26 @@ export default function SettingsScreen() {
     </Pressable>
   );
 
+  const DebugToggle = () => (
+    <View className="bg-surface rounded-2xl p-6 border border-border">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 flex-row items-center gap-3">
+          <MaterialIcons name="bug-report" size={24} color={colors.primary} />
+          <View>
+            <Text className="text-sm font-semibold text-foreground">Serial Debug</Text>
+            <Text className="text-xs text-muted mt-1">Log sensor data to console</Text>
+          </View>
+        </View>
+        <Switch
+          value={debugEnabled}
+          onValueChange={toggleDebug}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={debugEnabled ? colors.primary : colors.muted}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -145,41 +229,8 @@ export default function SettingsScreen() {
           </View>
 
           {/* Debug Section */}
-          <View className="bg-surface rounded-2xl p-6 border border-border">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1 flex-row items-center gap-3">
-                <MaterialIcons name="bug-report" size={24} color={colors.primary} />
-                <View>
-                  <Text className="text-sm font-semibold text-foreground">Serial Debug</Text>
-                  <Text className="text-xs text-muted mt-1">Log sensor data to console</Text>
-                </View>
-              </View>
-              <Switch
-                value={preferences.debug_enabled}
-                onValueChange={toggleDebug}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={preferences.debug_enabled ? colors.primary : colors.muted}
-              />
-            </View>
-          </View>
-
-          {/* Notifications Section */}
-          <View className="bg-surface rounded-2xl p-6 border border-border">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1 flex-row items-center gap-3">
-                <MaterialIcons name="notifications" size={24} color={colors.primary} />
-                <View>
-                  <Text className="text-sm font-semibold text-foreground">Alert Notifications</Text>
-                  <Text className="text-xs text-muted mt-1">Notify when thresholds are exceeded</Text>
-                </View>
-              </View>
-              <Switch
-                value={preferences.notifications_enabled}
-                onValueChange={toggleNotifications}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={preferences.notifications_enabled ? colors.primary : colors.muted}
-              />
-            </View>
+          <View className="gap-3">
+            <DebugToggle />
           </View>
 
           {/* Divider */}
