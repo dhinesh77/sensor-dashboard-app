@@ -53,3 +53,10 @@
 - [x] Display current IP address on home screen
 - [x] Add WiFi signal strength icon display
 - [x] Update ESP32 code to send WiFi signal strength (RSSI)
+
+## Critical Bug Fixes - Sprint 3
+- [x] Remove Supabase dependency and use AsyncStorage instead
+- [x] Fix dashboard UI layout (temperature/humidity cards displaying correctly)
+- [x] Fix theme switching functionality
+- [x] Fix ESP32 connection in installed app
+- [x] Remove Supabase console error messages
