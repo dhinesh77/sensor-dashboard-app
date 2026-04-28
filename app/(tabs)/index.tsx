@@ -267,8 +267,8 @@ export default function HomeScreen() {
           {/* Temperature Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 items-center justify-center">
-                <MaterialIcons name="thermostat" size={32} color="white" />
+              <View className="w-16 h-16 rounded-full bg-orange-500 items-center justify-center">
+                <MaterialIcons name="thermostat" size={32} color="#FF6B35" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Temperature</Text>
@@ -283,8 +283,8 @@ export default function HomeScreen() {
           {/* Humidity Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
             <View className="flex-row items-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 items-center justify-center">
-                <MaterialIcons name="opacity" size={32} color="white" />
+              <View className="w-16 h-16 rounded-full bg-blue-500 items-center justify-center">
+                <MaterialIcons name="opacity" size={32} color="#0066FF" />
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-muted font-medium">Humidity</Text>
