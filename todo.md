@@ -60,3 +60,10 @@
 - [x] Fix theme switching functionality
 - [x] Fix ESP32 connection in installed app
 - [x] Remove Supabase console error messages
+
+
+## New Features - Sprint 4
+- [x] Add data history chart to visualize temperature/humidity trends
+- [x] Implement local data storage for historical readings
+- [ ] Add scan to connect option in network section (QR code scanning)
+- [x] Add notification enable/disable toggle in settings page

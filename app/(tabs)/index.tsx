@@ -81,6 +81,30 @@ export default function HomeScreen() {
     }
   };
 
+  // Add entry to history
+  const addToHistory = async (temp: number, humidity: number) => {
+    try {
+      const entry = {
+        timestamp: Date.now(),
+        temperature: temp,
+        humidity,
+      };
+
+      const stored = await AsyncStorage.getItem("sensor_history");
+      let entries = stored ? JSON.parse(stored) : [];
+      entries.push(entry);
+
+      // Keep only last 24 hours (288 entries at 5-second intervals)
+      if (entries.length > 288) {
+        entries = entries.slice(-288);
+      }
+
+      await AsyncStorage.setItem("sensor_history", JSON.stringify(entries));
+    } catch (error) {
+      if (debugEnabled) console.error("Error adding history:", error);
+    }
+  };
+
   // Check if readings trigger alerts
   const checkAlerts = (temp: number, humidity: number) => {
     let alert = null;
@@ -179,6 +203,7 @@ export default function HomeScreen() {
         console.log(`[DEBUG] Temperature: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
       }
 
+      await addToHistory(temp, humidity);
       checkAlerts(temp, humidity);
       setConnectionError(null);
     } catch (error) {

@@ -18,6 +18,7 @@ type ThemeMode = "light" | "dark" | "auto";
 const STORAGE_KEY = "alert_thresholds";
 const THEME_STORAGE_KEY = "theme_mode";
 const DEBUG_STORAGE_KEY = "serial_debug_enabled";
+const NOTIFICATION_STORAGE_KEY = "notifications_enabled";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -33,12 +34,14 @@ export default function SettingsScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // Load thresholds, theme, and debug settings on mount
+  // Load thresholds, theme, debug, and notification settings on mount
   useEffect(() => {
     loadThresholds();
     loadThemeMode();
     loadDebugSetting();
+    loadNotificationSetting();
   }, []);
 
   const loadThemeMode = async () => {
@@ -62,10 +65,21 @@ export default function SettingsScreen() {
     try {
       const stored = await AsyncStorage.getItem(DEBUG_STORAGE_KEY);
       if (stored) {
-        setDebugEnabled(stored === "true");
+        setDebugEnabled(JSON.parse(stored));
       }
     } catch (error) {
       console.error("Error loading debug setting:", error);
+    }
+  };
+
+  const loadNotificationSetting = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEY);
+      if (stored) {
+        setNotificationsEnabled(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error("Error loading notification setting:", error);
     }
   };
 
@@ -84,6 +98,15 @@ export default function SettingsScreen() {
       setDebugEnabled(value);
     } catch (error) {
       Alert.alert("Error", "Failed to save debug setting");
+    }
+  };
+
+  const toggleNotifications = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATION_STORAGE_KEY, value.toString());
+      setNotificationsEnabled(value);
+    } catch (error) {
+      Alert.alert("Error", "Failed to save notification setting");
     }
   };
 
@@ -193,6 +216,26 @@ export default function SettingsScreen() {
     </View>
   );
 
+  const NotificationToggle = () => (
+    <View className="bg-surface rounded-2xl p-6 border border-border">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 flex-row items-center gap-3">
+          <MaterialIcons name="notifications" size={24} color={colors.primary} />
+          <View>
+            <Text className="text-sm font-semibold text-foreground">Notifications</Text>
+            <Text className="text-xs text-muted mt-1">Alert when thresholds exceeded</Text>
+          </View>
+        </View>
+        <Switch
+          value={notificationsEnabled}
+          onValueChange={toggleNotifications}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={notificationsEnabled ? colors.primary : colors.muted}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
@@ -226,6 +269,11 @@ export default function SettingsScreen() {
           {/* Debug Section */}
           <View className="gap-3">
             <DebugToggle />
+          </View>
+
+          {/* Notification Section */}
+          <View className="gap-3">
+            <NotificationToggle />
           </View>
 
           {/* Divider */}
