@@ -316,26 +316,29 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Temperature Card */}
-          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
-            <Text className="text-center text-sm text-muted">Temperature</Text>
-            <View className="flex-row items-center justify-center gap-4">
-              <MaterialIcons name="thermostat" size={48} color="#FF6B35" />
-              <View>
-                <Text className="text-4xl font-bold text-foreground">{sensorData.temperature.toFixed(1)}</Text>
-                <Text className="text-lg text-muted">°C</Text>
+          {/* Temperature & Humidity Row */}
+          <View className="flex-row gap-4">
+            {/* Temperature Card */}
+            <View className="flex-1 bg-surface rounded-2xl p-6 border border-border gap-3">
+              <Text className="text-center text-sm text-muted">Temperature</Text>
+              <View className="flex-row items-center justify-center gap-2">
+                <MaterialIcons name="thermostat" size={40} color="#FF6B35" />
+                <View>
+                  <Text className="text-3xl font-bold text-foreground">{sensorData.temperature.toFixed(1)}</Text>
+                  <Text className="text-sm text-muted">°C</Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          {/* Humidity Card */}
-          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
-            <Text className="text-center text-sm text-muted">Humidity</Text>
-            <View className="flex-row items-center justify-center gap-4">
-              <MaterialIcons name="water-drop" size={48} color="#0066FF" />
-              <View>
-                <Text className="text-4xl font-bold text-foreground">{sensorData.humidity.toFixed(0)}</Text>
-                <Text className="text-lg text-muted">%</Text>
+            {/* Humidity Card */}
+            <View className="flex-1 bg-surface rounded-2xl p-6 border border-border gap-3">
+              <Text className="text-center text-sm text-muted">Humidity</Text>
+              <View className="flex-row items-center justify-center gap-2">
+                <MaterialIcons name="water-drop" size={40} color="#0066FF" />
+                <View>
+                  <Text className="text-3xl font-bold text-foreground">{sensorData.humidity.toFixed(0)}</Text>
+                  <Text className="text-sm text-muted">%</Text>
+                </View>
               </View>
             </View>
           </View>

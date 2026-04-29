@@ -91,3 +91,8 @@
 ## Critical Issues - Debugging Needed
 - [x] Fix connection failed - network request failed error (web preview limitation explained)
 - [x] Fix device discovery - improved with AbortController and proper subnet detection
+
+
+## Final Issues - Last Sprint
+- [x] Combine temperature and humidity into single row on dashboard
+- [x] Fix downloaded app connectivity (works in Expo Go but not in built app) - Added network security config
