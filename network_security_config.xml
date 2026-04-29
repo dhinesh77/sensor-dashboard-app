@@ -2,9 +2,29 @@
 <network-security-config>
   <!-- Allow cleartext traffic to local network IPs for ESP32 communication -->
   <domain-config cleartextTrafficPermitted="true">
-    <domain includeSubdomains="true">192.168.0.0/16</domain>
-    <domain includeSubdomains="true">10.0.0.0/8</domain>
-    <domain includeSubdomains="true">172.16.0.0/12</domain>
+    <!-- 192.168.x.x range -->
+    <domain includeSubdomains="true">192.168.0.1</domain>
+    <domain includeSubdomains="true">192.168.1.1</domain>
+    <domain includeSubdomains="true">192.168.2.1</domain>
+    <domain includeSubdomains="true">192.168.3.1</domain>
+    <domain includeSubdomains="true">192.168.4.1</domain>
+    <domain includeSubdomains="true">192.168.5.1</domain>
+    <domain includeSubdomains="true">192.168.6.1</domain>
+    <domain includeSubdomains="true">192.168.7.1</domain>
+    <domain includeSubdomains="true">192.168.8.1</domain>
+    <domain includeSubdomains="true">192.168.9.1</domain>
+    <domain includeSubdomains="true">192.168.100.1</domain>
+    <!-- 10.x.x.x range -->
+    <domain includeSubdomains="true">10.0.0.1</domain>
+    <domain includeSubdomains="true">10.0.1.1</domain>
+    <domain includeSubdomains="true">10.1.1.1</domain>
+    <!-- 172.16-31.x.x range -->
+    <domain includeSubdomains="true">172.16.0.1</domain>
+    <domain includeSubdomains="true">172.17.0.1</domain>
+    <domain includeSubdomains="true">172.18.0.1</domain>
+    <domain includeSubdomains="true">172.19.0.1</domain>
+    <domain includeSubdomains="true">172.20.0.1</domain>
+    <!-- mDNS hostnames -->
     <domain includeSubdomains="true">*.local</domain>
   </domain-config>
   <!-- All other traffic must use HTTPS -->

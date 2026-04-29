@@ -48,13 +48,10 @@ export default function SettingsScreen() {
     try {
       const stored = await AsyncStorage.getItem(THEME_STORAGE_KEY);
       if (stored) {
-        setThemeMode(stored as ThemeMode);
         const mode = stored as ThemeMode;
-        if (mode === "light") {
-          setColorScheme("light");
-        } else if (mode === "dark") {
-          setColorScheme("dark");
-        }
+        setThemeMode(mode);
+        // Always call setColorScheme with the stored mode, including "auto"
+        setColorScheme(mode);
       }
     } catch (error) {
       console.error("Error loading theme mode:", error);

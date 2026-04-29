@@ -95,4 +95,5 @@
 
 ## Final Issues - Last Sprint
 - [x] Combine temperature and humidity into single row on dashboard
-- [x] Fix downloaded app connectivity (works in Expo Go but not in built app) - Added network security config
+- [x] Fix downloaded app connectivity (works in Expo Go but not in built app) - Fixed network security config XML and improved fetch with AbortController
+- [x] Fix auto theme mode not switching - Fixed settings.tsx to properly call setColorScheme for auto mode

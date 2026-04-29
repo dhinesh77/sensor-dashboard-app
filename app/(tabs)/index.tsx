@@ -167,12 +167,13 @@ export default function HomeScreen() {
 
   // Fetch sensor data from ESP32 with timeout and fallback
   const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response> => {
-    return Promise.race([
-      fetch(url, { method: "GET" }),
-      new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error("Request timeout")), timeout)
-      ),
-    ]) as Promise<Response>;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    return fetch(url, { 
+      method: "GET",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
   };
 
   const refreshSensorData = async (address?: string) => {
@@ -187,23 +188,27 @@ export default function HomeScreen() {
       let connected = false;
 
       try {
-        const res = await fetchWithTimeout(url, 2500);
+        const res = await fetchWithTimeout(url, 3000);
         if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
         data = await res.json();
         connected = true;
         setCurrentIP(endpoint);
+        if (debugEnabled) console.log("[DEBUG] Connected via:", endpoint);
       } catch (primaryError) {
+        if (debugEnabled) console.log("[DEBUG] Primary connection failed:", primaryError);
         // If using hostname and it fails, try fallback to IP
         if (useHostname && endpoint === esp32Hostname && esp32IP !== esp32Hostname) {
-          console.log("Hostname failed, trying IP fallback:", esp32IP);
+          if (debugEnabled) console.log("[DEBUG] Trying IP fallback:", esp32IP);
           try {
             const fallbackUrl = `http://${esp32IP}/sensor`;
-            const fallbackRes = await fetchWithTimeout(fallbackUrl, 2500);
+            const fallbackRes = await fetchWithTimeout(fallbackUrl, 3000);
             if (!fallbackRes.ok) throw new Error(`HTTP Error: ${fallbackRes.status}`);
             data = await fallbackRes.json();
             connected = true;
             setCurrentIP(esp32IP);
+            if (debugEnabled) console.log("[DEBUG] Connected via fallback IP:", esp32IP);
           } catch (fallbackError) {
+            if (debugEnabled) console.log("[DEBUG] Fallback also failed:", fallbackError);
             throw fallbackError;
           }
         } else {
