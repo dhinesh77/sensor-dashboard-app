@@ -147,13 +147,13 @@ export default function HomeScreen() {
     }
   };
 
-  // Get WiFi signal strength icon
+  // Get WiFi signal strength icon (using valid MaterialIcons names)
   const getWiFiIcon = (rssi: number): any => {
     if (rssi === 0) return "wifi-off";
-    if (rssi > -50) return "signal-cellular-4-bar";
-    if (rssi > -60) return "signal-cellular-3-bar";
-    if (rssi > -70) return "signal-cellular-2-bar";
-    return "signal-cellular-1-bar";
+    if (rssi > -50) return "wifi";
+    if (rssi > -60) return "wifi";
+    if (rssi > -70) return "wifi";
+    return "wifi";
   };
 
   // Get WiFi signal strength color
@@ -165,23 +165,53 @@ export default function HomeScreen() {
     return colors.error;
   };
 
-  // Fetch sensor data from ESP32 with fallback from mDNS to IP
+  // Fetch sensor data from ESP32 with timeout and fallback
+  const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response> => {
+    return Promise.race([
+      fetch(url, { method: "GET" }),
+      new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), timeout)
+      ),
+    ]) as Promise<Response>;
+  };
+
   const refreshSensorData = async (address?: string) => {
     setIsRefreshing(true);
-    let endpoint = address || (useHostname ? esp32Hostname : esp32IP);
+    const endpoint = address || (useHostname ? esp32Hostname : esp32IP);
     console.log("Fetching from:", endpoint);
 
     try {
       const url = `http://${endpoint}/sensor`;
+      let response;
+      let data;
+      let connected = false;
 
       try {
-        const response = await fetch(url, { method: "GET" });
-
-        if (!response.ok) {
-          throw new Error(`HTTP Error: ${response.status}`);
+        const res = await fetchWithTimeout(url, 2500);
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+        data = await res.json();
+        connected = true;
+        setCurrentIP(endpoint);
+      } catch (primaryError) {
+        // If using hostname and it fails, try fallback to IP
+        if (useHostname && endpoint === esp32Hostname && esp32IP !== esp32Hostname) {
+          console.log("Hostname failed, trying IP fallback:", esp32IP);
+          try {
+            const fallbackUrl = `http://${esp32IP}/sensor`;
+            const fallbackRes = await fetchWithTimeout(fallbackUrl, 2500);
+            if (!fallbackRes.ok) throw new Error(`HTTP Error: ${fallbackRes.status}`);
+            data = await fallbackRes.json();
+            connected = true;
+            setCurrentIP(esp32IP);
+          } catch (fallbackError) {
+            throw fallbackError;
+          }
+        } else {
+          throw primaryError;
         }
+      }
 
-        const data = await response.json();
+      if (connected && data) {
         const temp = data.temperature || 0;
         const humidity = data.humidity || 0;
         const rssi = data.rssi || 0;
@@ -193,51 +223,13 @@ export default function HomeScreen() {
           lastUpdated: new Date(),
         });
 
-        setCurrentIP(endpoint);
-
         if (debugEnabled) {
-          console.log(`[DEBUG] Temperature: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
+          console.log(`[DEBUG] Temp: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
         }
 
         await addToHistory(temp, humidity);
         checkAlerts(temp, humidity);
         setConnectionError(null);
-      } catch (primaryError) {
-        // If using hostname and it fails, try fallback to IP address
-        if (useHostname && endpoint === esp32Hostname) {
-          console.log("mDNS failed, trying IP fallback:", esp32IP);
-          const fallbackUrl = `http://${esp32IP}/sensor`;
-          
-          const fallbackResponse = await fetch(fallbackUrl, { method: "GET" });
-
-          if (!fallbackResponse.ok) {
-            throw new Error(`HTTP Error: ${fallbackResponse.status}`);
-          }
-
-          const data = await fallbackResponse.json();
-          const temp = data.temperature || 0;
-          const humidity = data.humidity || 0;
-          const rssi = data.rssi || 0;
-
-          setSensorData({
-            temperature: temp,
-            humidity: humidity,
-            wifiSignal: rssi,
-            lastUpdated: new Date(),
-          });
-
-          setCurrentIP(esp32IP);
-
-          if (debugEnabled) {
-            console.log(`[DEBUG] Connected via IP fallback. Temp: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
-          }
-
-          await addToHistory(temp, humidity);
-          checkAlerts(temp, humidity);
-          setConnectionError(null);
-        } else {
-          throw primaryError;
-        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -323,32 +315,28 @@ export default function HomeScreen() {
           )}
 
           {/* Temperature Card */}
-          <View className="bg-surface rounded-2xl p-6 border border-border">
-            <View className="flex-row items-center gap-4">
+          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
+            <Text className="text-center text-sm text-muted">Temperature</Text>
+            <View className="flex-row items-center justify-center gap-4">
               <View className="w-16 h-16 rounded-full bg-orange-500 items-center justify-center">
-                <MaterialIcons name="thermostat" size={32} color="#FF6B35" />
+                <MaterialIcons name="thermostat" size={32} color="#FFFFFF" />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm text-muted font-medium">Temperature</Text>
-                <Text className="text-4xl font-bold text-foreground">
-                  {sensorData.temperature.toFixed(1)}
-                </Text>
+              <View>
+                <Text className="text-4xl font-bold text-foreground">{sensorData.temperature.toFixed(1)}</Text>
                 <Text className="text-lg text-muted">°C</Text>
               </View>
             </View>
           </View>
 
           {/* Humidity Card */}
-          <View className="bg-surface rounded-2xl p-6 border border-border">
-            <View className="flex-row items-center gap-4">
+          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
+            <Text className="text-center text-sm text-muted">Humidity</Text>
+            <View className="flex-row items-center justify-center gap-4">
               <View className="w-16 h-16 rounded-full bg-blue-500 items-center justify-center">
-                <MaterialIcons name="opacity" size={32} color="#0066FF" />
+                <MaterialIcons name="water-drop" size={32} color="#FFFFFF" />
               </View>
-              <View className="flex-1">
-                <Text className="text-sm text-muted font-medium">Humidity</Text>
-                <Text className="text-4xl font-bold text-foreground">
-                  {sensorData.humidity.toFixed(0)}
-                </Text>
+              <View>
+                <Text className="text-4xl font-bold text-foreground">{sensorData.humidity.toFixed(0)}</Text>
                 <Text className="text-lg text-muted">%</Text>
               </View>
             </View>

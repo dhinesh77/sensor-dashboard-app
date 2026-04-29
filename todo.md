@@ -73,3 +73,10 @@
 - [x] Fix mDNS not working in built app (works in Expo Go)
 - [x] Implement automatic fallback from mDNS to manual IP in built app
 - [ ] Test connection in downloaded app with both mDNS and IP fallback
+
+
+## Critical Bugs - Immediate Fix Required
+- [x] Fix connection failed error - implemented timeout and improved fallback mechanism
+- [x] Fix auto theme mode - theme provider properly listens to system settings
+- [x] Fix icon display - white icons on colored backgrounds now display correctly
+- [x] Fix WiFi symbol - using correct MaterialIcons names
