@@ -67,3 +67,9 @@
 - [x] Implement local data storage for historical readings
 - [ ] Add scan to connect option in network section (QR code scanning)
 - [x] Add notification enable/disable toggle in settings page
+
+
+## Critical Issue - Built App mDNS Connection
+- [x] Fix mDNS not working in built app (works in Expo Go)
+- [x] Implement automatic fallback from mDNS to manual IP in built app
+- [ ] Test connection in downloaded app with both mDNS and IP fallback

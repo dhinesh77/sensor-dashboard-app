@@ -165,47 +165,80 @@ export default function HomeScreen() {
     return colors.error;
   };
 
-  // Fetch sensor data from ESP32
+  // Fetch sensor data from ESP32 with fallback from mDNS to IP
   const refreshSensorData = async (address?: string) => {
     setIsRefreshing(true);
-    const endpoint = address || (useHostname ? esp32Hostname : esp32IP);
+    let endpoint = address || (useHostname ? esp32Hostname : esp32IP);
     console.log("Fetching from:", endpoint);
 
     try {
       const url = `http://${endpoint}/sensor`;
 
-      const response = await fetch(url, {
-        method: "GET",
-      });
+      try {
+        const response = await fetch(url, { method: "GET" });
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const temp = data.temperature || 0;
+        const humidity = data.humidity || 0;
+        const rssi = data.rssi || 0;
+
+        setSensorData({
+          temperature: temp,
+          humidity: humidity,
+          wifiSignal: rssi,
+          lastUpdated: new Date(),
+        });
+
+        setCurrentIP(endpoint);
+
+        if (debugEnabled) {
+          console.log(`[DEBUG] Temperature: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
+        }
+
+        await addToHistory(temp, humidity);
+        checkAlerts(temp, humidity);
+        setConnectionError(null);
+      } catch (primaryError) {
+        // If using hostname and it fails, try fallback to IP address
+        if (useHostname && endpoint === esp32Hostname) {
+          console.log("mDNS failed, trying IP fallback:", esp32IP);
+          const fallbackUrl = `http://${esp32IP}/sensor`;
+          
+          const fallbackResponse = await fetch(fallbackUrl, { method: "GET" });
+
+          if (!fallbackResponse.ok) {
+            throw new Error(`HTTP Error: ${fallbackResponse.status}`);
+          }
+
+          const data = await fallbackResponse.json();
+          const temp = data.temperature || 0;
+          const humidity = data.humidity || 0;
+          const rssi = data.rssi || 0;
+
+          setSensorData({
+            temperature: temp,
+            humidity: humidity,
+            wifiSignal: rssi,
+            lastUpdated: new Date(),
+          });
+
+          setCurrentIP(esp32IP);
+
+          if (debugEnabled) {
+            console.log(`[DEBUG] Connected via IP fallback. Temp: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
+          }
+
+          await addToHistory(temp, humidity);
+          checkAlerts(temp, humidity);
+          setConnectionError(null);
+        } else {
+          throw primaryError;
+        }
       }
-
-      const data = await response.json();
-
-      const temp = data.temperature || 0;
-      const humidity = data.humidity || 0;
-      const rssi = data.rssi || 0;
-
-      setSensorData({
-        temperature: temp,
-        humidity: humidity,
-        wifiSignal: rssi,
-        lastUpdated: new Date(),
-      });
-
-      // Set current IP from the endpoint
-      setCurrentIP(endpoint);
-
-      // Log to console if debug is enabled
-      if (debugEnabled) {
-        console.log(`[DEBUG] Temperature: ${temp}°C, Humidity: ${humidity}%, WiFi: ${rssi}dBm`);
-      }
-
-      await addToHistory(temp, humidity);
-      checkAlerts(temp, humidity);
-      setConnectionError(null);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error("Error fetching sensor data:", errorMessage);
