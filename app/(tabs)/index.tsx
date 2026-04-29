@@ -318,9 +318,7 @@ export default function HomeScreen() {
           <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
             <Text className="text-center text-sm text-muted">Temperature</Text>
             <View className="flex-row items-center justify-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-orange-500 items-center justify-center">
-                <MaterialIcons name="thermostat" size={32} color="#FFFFFF" />
-              </View>
+              <MaterialIcons name="thermostat" size={48} color="#FF6B35" />
               <View>
                 <Text className="text-4xl font-bold text-foreground">{sensorData.temperature.toFixed(1)}</Text>
                 <Text className="text-lg text-muted">°C</Text>
@@ -332,9 +330,7 @@ export default function HomeScreen() {
           <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
             <Text className="text-center text-sm text-muted">Humidity</Text>
             <View className="flex-row items-center justify-center gap-4">
-              <View className="w-16 h-16 rounded-full bg-blue-500 items-center justify-center">
-                <MaterialIcons name="water-drop" size={32} color="#FFFFFF" />
-              </View>
+              <MaterialIcons name="water-drop" size={48} color="#0066FF" />
               <View>
                 <Text className="text-4xl font-bold text-foreground">{sensorData.humidity.toFixed(0)}</Text>
                 <Text className="text-lg text-muted">%</Text>

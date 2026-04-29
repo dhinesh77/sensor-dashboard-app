@@ -80,3 +80,9 @@
 - [x] Fix auto theme mode - theme provider properly listens to system settings
 - [x] Fix icon display - white icons on colored backgrounds now display correctly
 - [x] Fix WiFi symbol - using correct MaterialIcons names
+
+
+## Final Sprint - Device Discovery & Icon Colors
+- [x] Add device discovery feature to scan local network for ESP32 devices
+- [x] Fix dashboard icons to use colored icons (orange and blue) in both light and dark modes
+- [ ] Test device discovery and icon colors in preview and Expo Go

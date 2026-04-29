@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, TextInput, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { discoverDevices, type DiscoveredDevice } from "@/lib/device-discovery";
 
 const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
 const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
@@ -19,6 +20,9 @@ export default function NetworkScreen() {
   const [useHostname, setUseHostname] = useState(true);
   const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
   const [tempHostname, setTempHostname] = useState(DEFAULT_ESP32_HOSTNAME);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
+  const [discoveryMessage, setDiscoveryMessage] = useState("");
 
   // Load stored IP and hostname on mount
   useEffect(() => {
@@ -82,6 +86,43 @@ export default function NetworkScreen() {
       await testConnection(tempIP);
     } catch (error) {
       Alert.alert("Error", "Failed to save IP address");
+    }
+  };
+
+  const startDeviceDiscovery = async () => {
+    setIsDiscovering(true);
+    setDiscoveredDevices([]);
+    setDiscoveryMessage("Starting device discovery...");
+    
+    try {
+      const devices = await discoverDevices((message) => {
+        setDiscoveryMessage(message);
+      });
+      setDiscoveredDevices(devices);
+      
+      if (devices.length === 0) {
+        setDiscoveryMessage("No ESP32 devices found. Make sure your device is connected to the same WiFi network.");
+      } else {
+        setDiscoveryMessage(`Found ${devices.length} device(s)`);
+      }
+    } catch (error) {
+      setDiscoveryMessage("Discovery failed. Check your network connection.");
+      console.error("Device discovery error:", error);
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const selectDiscoveredDevice = async (device: DiscoveredDevice) => {
+    try {
+      await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, device.ip);
+      setEsp32IP(device.ip);
+      setTempIP(device.ip);
+      setUseHostname(false);
+      setDiscoveredDevices([]);
+      await testConnection(device.ip);
+    } catch (error) {
+      Alert.alert("Error", "Failed to select device");
     }
   };
 
@@ -191,6 +232,54 @@ export default function NetworkScreen() {
               </View>
             </View>
           )}
+
+          {/* Device Discovery Section */}
+          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons name="search" size={20} color={colors.primary} />
+              <Text className="text-sm font-semibold text-foreground">Device Discovery</Text>
+            </View>
+            <Pressable
+              onPress={startDeviceDiscovery}
+              disabled={isDiscovering}
+              className="bg-primary rounded-lg p-3 items-center flex-row justify-center gap-2"
+              style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+            >
+              {isDiscovering ? (
+                <>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text className="text-white font-semibold">Scanning...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="search" size={18} color="#FFFFFF" />
+                  <Text className="text-white font-semibold">Scan for Devices</Text>
+                </>
+              )}
+            </Pressable>
+            {discoveryMessage && (
+              <Text className="text-xs text-muted text-center">{discoveryMessage}</Text>
+            )}
+            {discoveredDevices.length > 0 && (
+              <View className="gap-2">
+                <Text className="text-xs font-semibold text-foreground">Found Devices:</Text>
+                {discoveredDevices.map((device, index) => (
+                  <Pressable
+                    key={index}
+                    onPress={() => selectDiscoveredDevice(device)}
+                    className="bg-primary/10 border border-primary rounded-lg p-3 flex-row items-center justify-between"
+                    style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+                  >
+                    <View>
+                      <Text className="font-semibold text-foreground">{device.name}</Text>
+                      <Text className="text-xs text-muted">{device.ip}</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.primary} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
 
           {/* Hostname Section */}
           <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
