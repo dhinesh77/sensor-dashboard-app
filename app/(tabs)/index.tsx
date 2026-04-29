@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, Pressable, ActivityIndicator, Platform } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -302,7 +302,9 @@ export default function HomeScreen() {
             <View className="bg-error rounded-2xl p-4 border border-error">
               <Text className="text-sm text-white font-medium">{connectionError}</Text>
               <Text className="text-xs text-white mt-2">
-                Make sure ESP32 is running and connected to WiFi. Check the IP address in settings.
+                {Platform.OS === "web"
+                  ? "Web preview cannot access your home network. Use iOS/Android app to connect to ESP32."
+                  : "Make sure ESP32 is running and connected to WiFi. Check the IP address in settings."}
               </Text>
             </View>
           )}

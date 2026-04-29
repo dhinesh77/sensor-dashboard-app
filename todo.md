@@ -86,3 +86,8 @@
 - [x] Add device discovery feature to scan local network for ESP32 devices
 - [x] Fix dashboard icons to use colored icons (orange and blue) in both light and dark modes
 - [ ] Test device discovery and icon colors in preview and Expo Go
+
+
+## Critical Issues - Debugging Needed
+- [x] Fix connection failed - network request failed error (web preview limitation explained)
+- [x] Fix device discovery - improved with AbortController and proper subnet detection

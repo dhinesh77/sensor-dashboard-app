@@ -1,7 +1,4 @@
-/**
- * Device Discovery Utility
- * Scans the local network for ESP32 sensor devices
- */
+import { Platform } from "react-native";
 
 export interface DiscoveredDevice {
   hostname: string;
@@ -11,82 +8,109 @@ export interface DiscoveredDevice {
 }
 
 /**
- * Scan for ESP32 devices on the local network
- * Tries common IP ranges and mDNS hostnames
+ * Detects the current device's subnet from an IP address
+ * Supports common private subnets: 192.168.x.x, 10.x.x.x, 172.16-31.x.x
+ */
+function detectSubnet(currentIp: string): string[] {
+  const parts = currentIp.split(".");
+  if (parts.length !== 4) return ["192.168.1", "192.168.0", "10.0.0"]; // fallback
+
+  const firstOctet = parseInt(parts[0], 10);
+  const secondOctet = parseInt(parts[1], 10);
+  const subnets: string[] = [];
+
+  // 192.168.x.x
+  if (firstOctet === 192 && secondOctet === 168) {
+    subnets.push(`${parts[0]}.${parts[1]}.${parts[2]}`);
+  }
+
+  // 10.x.x.x
+  if (firstOctet === 10) {
+    subnets.push(`${parts[0]}.${parts[1]}.${parts[2]}`);
+  }
+
+  // 172.16-31.x.x
+  if (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31) {
+    subnets.push(`${parts[0]}.${parts[1]}.${parts[2]}`);
+  }
+
+  // Always include common subnets as fallback
+  if (subnets.length === 0) {
+    subnets.push("192.168.1", "192.168.0", "10.0.0");
+  }
+
+  return subnets;
+}
+
+/**
+ * Attempts to fetch sensor data from a given IP with timeout using AbortController
+ */
+async function checkDevice(ip: string, timeoutMs: number = 1500): Promise<DiscoveredDevice | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`http://${ip}/sensor`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+
+    if (response.ok) {
+      return {
+        hostname: ip,
+        ip: ip,
+        name: `ESP32 (${ip})`,
+        timestamp: Date.now(),
+      };
+    }
+  } catch (error) {
+    // Timeout or network error - device not found
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  return null;
+}
+
+/**
+ * Discovers ESP32 devices on the local network
+ * Scans common private subnets with limited concurrency
  */
 export const discoverDevices = async (
   onProgress?: (message: string) => void
 ): Promise<DiscoveredDevice[]> => {
   const devices: DiscoveredDevice[] = [];
-  const baseIP = "192.168.1"; // Common home network range
-  const timeout = 1500; // 1.5 second timeout per device
 
-  // First, try mDNS hostname (works on most networks)
-  try {
-    onProgress?.("Scanning for mDNS devices...");
-    const mdnsHostname = "sensor-dashboard.local";
-    const response = await fetchWithTimeout(`http://${mdnsHostname}/sensor`, timeout);
-    if (response.ok) {
-      devices.push({
-        hostname: mdnsHostname,
-        ip: mdnsHostname,
-        name: "Sensor Dashboard (mDNS)",
-        timestamp: Date.now(),
-      });
-    }
-  } catch (error) {
-    // mDNS not available, continue with IP scanning
-  }
-
-  // Scan common IP range (1-254)
-  onProgress?.("Scanning IP range 192.168.1.x...");
-  const scanPromises = [];
-
-  for (let i = 1; i <= 254; i++) {
-    const ip = `${baseIP}.${i}`;
-    scanPromises.push(
-      (async () => {
-        try {
-          const response = await fetchWithTimeout(`http://${ip}/sensor`, timeout);
-          if (response.ok) {
-            const data = await response.json();
-            devices.push({
-              hostname: ip,
-              ip: ip,
-              name: `ESP32 (${ip})`,
-              timestamp: Date.now(),
-            });
-          }
-        } catch (error) {
-          // Device not found or timeout
-        }
-      })()
-    );
-  }
-
-  // Run scans in batches to avoid overwhelming the network
-  const batchSize = 20;
-  for (let i = 0; i < scanPromises.length; i += batchSize) {
-    const batch = scanPromises.slice(i, i + batchSize);
-    await Promise.all(batch);
+  // Web preview cannot access private LAN
+  if (Platform.OS === "web") {
     onProgress?.(
-      `Scanning... ${Math.min(i + batchSize, scanPromises.length)}/${scanPromises.length}`
+      "Device discovery requires running on iOS/Android device. Web preview cannot access local network."
     );
+    return [];
+  }
+
+  // Try common subnets
+  const subnets = ["192.168.1", "192.168.0", "10.0.0"];
+
+  for (const subnet of subnets) {
+    onProgress?.(`Scanning ${subnet}.x...`);
+
+    // Scan with limited concurrency (5 at a time to avoid socket exhaustion)
+    const ips = Array.from({ length: 254 }, (_, i) => `${subnet}.${i + 1}`);
+
+    for (let i = 0; i < ips.length; i += 5) {
+      const batch = ips.slice(i, i + 5);
+      const results = await Promise.all(batch.map((ip) => checkDevice(ip, 1500)));
+
+      for (const result of results) {
+        if (result) {
+          devices.push(result);
+        }
+      }
+    }
   }
 
   return devices;
-};
-
-/**
- * Fetch with timeout utility
- */
-const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response> => {
-  return Promise.race([
-    fetch(url, { method: "GET" }),
-    new Promise<Response>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timeout")), timeout)
-    ),
-  ]) as Promise<Response>;
 };
 
 /**
@@ -94,8 +118,8 @@ const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response
  */
 export const verifyDevice = async (ip: string): Promise<boolean> => {
   try {
-    const response = await fetchWithTimeout(`http://${ip}/sensor`, 2000);
-    return response.ok;
+    const device = await checkDevice(ip, 2500);
+    return device !== null;
   } catch (error) {
     return false;
   }
