@@ -55,10 +55,20 @@ export default function NetworkScreen() {
     }
   };
 
+  const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    return fetch(url, { 
+      method: "GET",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  };
+
   const testConnection = async (address: string) => {
     setConnectionStatus("testing");
     try {
-      const response = await fetch(`http://${address}/sensor`, { method: "GET" });
+      const response = await fetchWithTimeout(`http://${address}/sensor`, 3000);
       if (response.ok) {
         setConnectionStatus("success");
         Alert.alert("Success", `Connected to ESP32 at ${address}`);
@@ -68,7 +78,8 @@ export default function NetworkScreen() {
       }
     } catch (error) {
       setConnectionStatus("error");
-      Alert.alert("Error", `Failed to connect to ${address}. Make sure ESP32 is online.`);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      Alert.alert("Error", `Failed to connect to ${address}. ${errorMessage}`);
     }
   };
 
