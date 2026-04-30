@@ -7,9 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { discoverDevices, type DiscoveredDevice } from "@/lib/device-discovery";
 
 const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
-const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
 const DEFAULT_ESP32_IP = "192.168.1.33";
-const DEFAULT_ESP32_HOSTNAME = "sensor-dashboard.local";
 
 export default function NetworkScreen() {
   const colors = useColors();
@@ -17,17 +15,14 @@ export default function NetworkScreen() {
   const [tempIP, setTempIP] = useState(DEFAULT_ESP32_IP);
   const [isEditing, setIsEditing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
-  const [useHostname, setUseHostname] = useState(true);
-  const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
-  const [tempHostname, setTempHostname] = useState(DEFAULT_ESP32_HOSTNAME);
+
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoveredDevices, setDiscoveredDevices] = useState<DiscoveredDevice[]>([]);
   const [discoveryMessage, setDiscoveryMessage] = useState("");
 
-  // Load stored IP and hostname on mount
+  // Load stored IP on mount
   useEffect(() => {
     loadStoredIP();
-    loadStoredHostname();
   }, []);
 
   const loadStoredIP = async () => {
@@ -42,18 +37,7 @@ export default function NetworkScreen() {
     }
   };
 
-  const loadStoredHostname = async () => {
-    try {
-      const storedHostname = await AsyncStorage.getItem(ESP32_HOSTNAME_STORAGE_KEY);
-      if (storedHostname) {
-        setEsp32Hostname(storedHostname);
-        setTempHostname(storedHostname);
-        setUseHostname(true);
-      }
-    } catch (error) {
-      console.error("Error loading hostname:", error);
-    }
-  };
+
 
   const fetchWithTimeout = (url: string, timeout: number = 3000): Promise<Response> => {
     const controller = new AbortController();
@@ -92,7 +76,6 @@ export default function NetworkScreen() {
     try {
       await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, tempIP);
       setEsp32IP(tempIP);
-      setUseHostname(false);
       setIsEditing(false);
       await testConnection(tempIP);
     } catch (error) {
@@ -129,45 +112,11 @@ export default function NetworkScreen() {
       await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, device.ip);
       setEsp32IP(device.ip);
       setTempIP(device.ip);
-      setUseHostname(false);
       setDiscoveredDevices([]);
       await testConnection(device.ip);
     } catch (error) {
       Alert.alert("Error", "Failed to select device");
     }
-  };
-
-  const saveHostname = async () => {
-    if (!tempHostname.trim()) {
-      Alert.alert("Error", "Please enter a valid hostname");
-      return;
-    }
-
-    try {
-      await AsyncStorage.setItem(ESP32_HOSTNAME_STORAGE_KEY, tempHostname);
-      setEsp32Hostname(tempHostname);
-      setUseHostname(true);
-      setIsEditing(false);
-      await testConnection(tempHostname);
-    } catch (error) {
-      Alert.alert("Error", "Failed to save hostname");
-    }
-  };
-
-  const resetToDefault = async () => {
-    Alert.alert("Reset Settings", "Reset to default hostname (sensor-dashboard.local)?", [
-      { text: "Cancel", onPress: () => {} },
-      {
-        text: "Reset",
-        onPress: async () => {
-          setTempHostname(DEFAULT_ESP32_HOSTNAME);
-          await AsyncStorage.setItem(ESP32_HOSTNAME_STORAGE_KEY, DEFAULT_ESP32_HOSTNAME);
-          setEsp32Hostname(DEFAULT_ESP32_HOSTNAME);
-          setUseHostname(true);
-          setIsEditing(false);
-        },
-      },
-    ]);
   };
 
   return (
@@ -187,10 +136,10 @@ export default function NetworkScreen() {
               <MaterialIcons name="router" size={32} color={colors.primary} />
               <View className="flex-1">
                 <Text className="text-2xl font-bold text-foreground">
-                  {useHostname ? esp32Hostname : esp32IP}
+                  {esp32IP}
                 </Text>
                 <Text className="text-xs text-muted mt-1">
-                  {useHostname ? "Using mDNS" : "Using IP Address"}
+                  Using IP Address
                 </Text>
               </View>
             </View>
@@ -292,72 +241,7 @@ export default function NetworkScreen() {
             )}
           </View>
 
-          {/* Hostname Section */}
-          <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons name="cloud" size={20} color={colors.primary} />
-              <Text className="text-sm font-semibold text-foreground">mDNS Hostname (Recommended)</Text>
-            </View>
-            <TextInput
-              value={tempHostname}
-              onChangeText={setTempHostname}
-              placeholder="e.g., sensor-dashboard.local"
-              placeholderTextColor={colors.muted}
-              className="border border-border rounded-lg p-3 text-foreground"
-              style={{ color: colors.foreground }}
-              editable={isEditing}
-            />
-            <Text className="text-xs text-muted">
-              mDNS automatically finds your ESP32 even if the IP changes
-            </Text>
-            {isEditing ? (
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={saveHostname}
-                  className="flex-1 bg-primary rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <Text className="text-white font-semibold">Save</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setIsEditing(false);
-                    setTempHostname(esp32Hostname);
-                  }}
-                  className="flex-1 bg-surface border border-border rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <Text className="text-foreground font-semibold">Cancel</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={() => setIsEditing(true)}
-                  className="flex-1 bg-primary rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <View className="flex-row items-center gap-2">
-                    <MaterialIcons name="edit" size={16} color="white" />
-                    <Text className="text-white font-semibold text-sm">Edit</Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  onPress={() => testConnection(esp32Hostname)}
-                  disabled={connectionStatus === "testing"}
-                  className="flex-1 bg-surface border border-border rounded-lg p-3 items-center"
-                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-                >
-                  <View className="flex-row items-center gap-2">
-                    <MaterialIcons name="refresh" size={16} color={colors.primary} />
-                    <Text className="text-foreground font-semibold text-sm">Test</Text>
-                  </View>
-                </Pressable>
-              </View>
-            )}
-          </View>
-
-          {/* Manual IP Fallback Section */}
+          {/* Manual IP Section */}
           <View className="bg-surface rounded-2xl p-6 border border-border gap-4">
             <View className="flex-row items-center gap-2">
               <MaterialIcons name="router" size={20} color={colors.muted} />
@@ -400,32 +284,20 @@ export default function NetworkScreen() {
             </View>
           </View>
 
-          {/* Reset Button */}
-          <Pressable
-            onPress={resetToDefault}
-            className="bg-surface border border-border rounded-lg p-4 items-center"
-            style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-          >
-            <View className="flex-row items-center gap-2">
-              <MaterialIcons name="restore" size={20} color={colors.muted} />
-              <Text className="text-muted font-semibold">Reset to Default</Text>
-            </View>
-          </Pressable>
-
           {/* Info Section */}
           <View className="bg-surface rounded-2xl p-4 border border-border gap-2">
             <Text className="text-sm font-semibold text-foreground">How It Works</Text>
             <Text className="text-xs text-muted leading-relaxed">
-              • mDNS (Multicast DNS) lets you access ESP32 by hostname instead of IP
+              • Enter your ESP32's IP address (default: 192.168.1.33)
             </Text>
             <Text className="text-xs text-muted leading-relaxed">
-              • Default hostname: sensor-dashboard.local
-            </Text>
-            <Text className="text-xs text-muted leading-relaxed">
-              • If mDNS fails, the app falls back to the manual IP address
+              • Use Device Discovery to automatically find ESP32 on your network
             </Text>
             <Text className="text-xs text-muted leading-relaxed">
               • Both devices must be on the same WiFi network
+            </Text>
+            <Text className="text-xs text-muted leading-relaxed">
+              • Test connection to verify settings are correct
             </Text>
           </View>
 

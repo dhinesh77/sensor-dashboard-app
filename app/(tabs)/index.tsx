@@ -13,10 +13,8 @@ interface SensorReading {
 }
 
 const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
-const ESP32_HOSTNAME_STORAGE_KEY = "esp32_hostname";
 const DEBUG_STORAGE_KEY = "serial_debug_enabled";
 const DEFAULT_ESP32_IP = "192.168.1.33";
-const DEFAULT_ESP32_HOSTNAME = "sensor-dashboard.local";
 
 /**
  * Dashboard Screen - Displays temperature and humidity sensor readings from ESP32
@@ -31,8 +29,6 @@ export default function HomeScreen() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [esp32IP, setEsp32IP] = useState(DEFAULT_ESP32_IP);
-  const [esp32Hostname, setEsp32Hostname] = useState(DEFAULT_ESP32_HOSTNAME);
-  const [useHostname, setUseHostname] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [alertThresholds, setAlertThresholds] = useState({
     tempMin: 15,
@@ -47,7 +43,6 @@ export default function HomeScreen() {
   // Load ESP32 IP from storage on mount
   useEffect(() => {
     loadStoredIP();
-    loadStoredHostname();
     loadAlertThresholds();
     loadDebugSetting();
     // Auto-refresh sensor data every 5 seconds
@@ -134,18 +129,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Load stored ESP32 hostname
-  const loadStoredHostname = async () => {
-    try {
-      const storedHostname = await AsyncStorage.getItem(ESP32_HOSTNAME_STORAGE_KEY);
-      if (storedHostname) {
-        setEsp32Hostname(storedHostname);
-        setUseHostname(true);
-      }
-    } catch (error) {
-      console.error("Error loading hostname:", error);
-    }
-  };
+
 
   // Get WiFi signal strength icon (using valid MaterialIcons names)
   const getWiFiIcon = (rssi: number): any => {
@@ -178,12 +162,11 @@ export default function HomeScreen() {
 
   const refreshSensorData = async (address?: string) => {
     setIsRefreshing(true);
-    const endpoint = address || (useHostname ? esp32Hostname : esp32IP);
+    const endpoint = address || esp32IP;
     console.log("Fetching from:", endpoint);
 
     try {
       const url = `http://${endpoint}/sensor`;
-      let response;
       let data;
       let connected = false;
 
@@ -194,26 +177,9 @@ export default function HomeScreen() {
         connected = true;
         setCurrentIP(endpoint);
         if (debugEnabled) console.log("[DEBUG] Connected via:", endpoint);
-      } catch (primaryError) {
-        if (debugEnabled) console.log("[DEBUG] Primary connection failed:", primaryError);
-        // If using hostname and it fails, try fallback to IP
-        if (useHostname && endpoint === esp32Hostname && esp32IP !== esp32Hostname) {
-          if (debugEnabled) console.log("[DEBUG] Trying IP fallback:", esp32IP);
-          try {
-            const fallbackUrl = `http://${esp32IP}/sensor`;
-            const fallbackRes = await fetchWithTimeout(fallbackUrl, 3000);
-            if (!fallbackRes.ok) throw new Error(`HTTP Error: ${fallbackRes.status}`);
-            data = await fallbackRes.json();
-            connected = true;
-            setCurrentIP(esp32IP);
-            if (debugEnabled) console.log("[DEBUG] Connected via fallback IP:", esp32IP);
-          } catch (fallbackError) {
-            if (debugEnabled) console.log("[DEBUG] Fallback also failed:", fallbackError);
-            throw fallbackError;
-          }
-        } else {
-          throw primaryError;
-        }
+      } catch (error) {
+        if (debugEnabled) console.log("[DEBUG] Connection failed:", error);
+        throw error;
       }
 
       if (connected && data) {
@@ -262,7 +228,7 @@ export default function HomeScreen() {
                 Last updated: {formatTime(sensorData.lastUpdated)}
               </Text>
               <Text className="text-xs text-muted mt-1">
-                ESP32: {useHostname ? esp32Hostname : esp32IP}
+                ESP32: {esp32IP}
               </Text>
             </View>
             <View className="flex-row gap-2">
@@ -286,7 +252,7 @@ export default function HomeScreen() {
               <View className="flex-1">
                 <Text className="text-xs text-muted font-medium">Current IP Address</Text>
                 <Text className="text-sm font-semibold text-foreground mt-1">
-                  {currentIP || (useHostname ? esp32Hostname : esp32IP)}
+                  {currentIP || esp32IP}
                 </Text>
               </View>
               <View className="items-center gap-1">
