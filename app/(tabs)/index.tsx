@@ -167,6 +167,7 @@ export default function HomeScreen() {
 
     try {
       const url = `http://${endpoint}/sensor`;
+      console.log("Trying URL:", url);
       let data;
       let connected = false;
 

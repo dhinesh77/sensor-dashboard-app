@@ -70,6 +70,7 @@ const config: ExpoConfig = {
       "ACCESS_NETWORK_STATE",
       "ACCESS_WIFI_STATE"
     ],
+    usesCleartextTraffic: true as any,
     intentFilters: [
       {
         action: "VIEW",
@@ -83,7 +84,7 @@ const config: ExpoConfig = {
         category: ["BROWSABLE", "DEFAULT"],
       },
     ],
-  },
+  } as any,
   web: {
     bundler: "metro",
     output: "static",

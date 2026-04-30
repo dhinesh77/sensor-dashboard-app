@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View, Pressable, TextInput, Alert, Switch } from "react-native";
+import { ScrollView, Text, View, Pressable, TextInput, Alert, Switch, Platform } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useThemeContext } from "@/lib/theme-provider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 interface AlertThresholds {
   tempMin: number;
@@ -104,6 +106,35 @@ export default function SettingsScreen() {
       setNotificationsEnabled(value);
     } catch (error) {
       Alert.alert("Error", "Failed to save notification setting");
+    }
+  };
+
+  const downloadLogcat = async () => {
+    try {
+      if (Platform.OS === "web") {
+        Alert.alert("Not Supported", "Logcat download is only available on Android and iOS");
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+      const logContent = `Sensor Dashboard Logs\nExported: ${timestamp}\n\nPlease check your device's system logs for detailed connection information.\n\nCommon issues:\n- Check if ESP32 is powered on\n- Verify WiFi network connection\n- Confirm IP address is correct\n- Check network security settings\n`;
+
+      const fileName = `sensor-dashboard-logs-${Date.now()}.txt`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(filePath, logContent);
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(filePath, {
+          mimeType: "text/plain",
+          dialogTitle: "Share Logs",
+        });
+      } else {
+        Alert.alert("Success", "Logs saved to: " + filePath);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to download logs: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   };
 
@@ -451,6 +482,18 @@ export default function SettingsScreen() {
             <View className="flex-row items-center gap-2">
               <MaterialIcons name="restore" size={20} color={colors.muted} />
               <Text className="text-muted font-semibold">Reset to Defaults</Text>
+            </View>
+          </Pressable>
+
+          {/* Download Logcat Button */}
+          <Pressable
+            onPress={downloadLogcat}
+            className="bg-primary rounded-lg p-4 items-center"
+            style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+          >
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons name="download" size={20} color="white" />
+              <Text className="text-white font-semibold">Download Logcat</Text>
             </View>
           </Pressable>
 
