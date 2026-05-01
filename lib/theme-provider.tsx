@@ -20,14 +20,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>("auto");
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const applyScheme = useCallback((scheme: ColorScheme) => {
-    nativewindColorScheme.set(scheme);
-    Appearance.setColorScheme?.(scheme);
+  const applyScheme = useCallback((mode: ThemeMode, resolvedScheme: ColorScheme) => {
+    // Set NativeWind to system or forced mode
+    nativewindColorScheme.set(mode === "auto" ? "system" : mode);
+    
+    // Clear React Native Appearance override for auto mode, or force it
+    const rnScheme = mode === "auto" ? null : mode;
+    // Cast to any to support older RN types that might not have null
+    (Appearance.setColorScheme as any)?.(rnScheme);
+
     if (typeof document !== "undefined") {
       const root = document.documentElement;
-      root.dataset.theme = scheme;
-      root.classList.toggle("dark", scheme === "dark");
-      const palette = SchemeColors[scheme];
+      root.dataset.theme = resolvedScheme;
+      root.classList.toggle("dark", resolvedScheme === "dark");
+      const palette = SchemeColors[resolvedScheme];
       Object.entries(palette).forEach(([token, value]) => {
         root.style.setProperty(`--color-${token}`, value);
       });
@@ -39,43 +45,32 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const loadThemeMode = async () => {
       try {
         const stored = await AsyncStorage.getItem("theme_mode");
-        if (stored) {
-          const mode = stored as ThemeMode;
-          setThemeModeState(mode);
-          
-          if (mode === "auto") {
-            const scheme = systemScheme as ColorScheme;
-            setColorSchemeState(scheme);
-            applyScheme(scheme);
-          } else {
-            setColorSchemeState(mode as ColorScheme);
-            applyScheme(mode as ColorScheme);
-          }
-        } else {
-          // Default to auto mode
-          setThemeModeState("auto");
-          setColorSchemeState(systemScheme as ColorScheme);
-          applyScheme(systemScheme as ColorScheme);
-        }
+        const mode = (stored as ThemeMode) || "auto";
+        setThemeModeState(mode);
+        
+        // Note: systemScheme might be overridden here if a previous session
+        // had a forced scheme. We still apply it, and the next useEffect
+        // will correct it if needed once the override is cleared.
+        const resolved = mode === "auto" ? systemScheme as ColorScheme : mode as ColorScheme;
+        setColorSchemeState(resolved);
+        applyScheme(mode, resolved);
       } catch (error) {
         console.error("Error loading theme mode:", error);
+      } finally {
+        setIsLoaded(true);
       }
-      setIsLoaded(true);
     };
     loadThemeMode();
-  }, [applyScheme, systemScheme]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyScheme]); // Intentionally omitting systemScheme to run only on mount
 
-  // Listen to system theme changes when in auto mode
+  // Sync auto mode with system scheme changes
   useEffect(() => {
     if (themeMode === "auto" && isLoaded) {
-      const subscription = Appearance.addChangeListener(({ colorScheme: newScheme }) => {
-        const scheme = newScheme ?? "light";
-        setColorSchemeState(scheme as ColorScheme);
-        applyScheme(scheme as ColorScheme);
-      });
-      return () => subscription.remove();
+      setColorSchemeState(systemScheme as ColorScheme);
+      applyScheme("auto", systemScheme as ColorScheme);
     }
-  }, [themeMode, isLoaded, applyScheme]);
+  }, [systemScheme, themeMode, isLoaded, applyScheme]);
 
   const setColorScheme = useCallback(
     async (mode: ThemeMode) => {
@@ -83,14 +78,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem("theme_mode", mode);
         setThemeModeState(mode);
 
-        if (mode === "auto") {
-          const scheme = systemScheme as ColorScheme;
-          setColorSchemeState(scheme);
-          applyScheme(scheme);
-        } else {
-          setColorSchemeState(mode as ColorScheme);
-          applyScheme(mode as ColorScheme);
-        }
+        const resolved = mode === "auto" ? systemScheme as ColorScheme : mode as ColorScheme;
+        setColorSchemeState(resolved);
+        applyScheme(mode, resolved);
       } catch (error) {
         console.error("Error setting theme:", error);
       }

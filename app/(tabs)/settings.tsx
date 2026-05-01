@@ -21,6 +21,7 @@ const STORAGE_KEY = "alert_thresholds";
 const THEME_STORAGE_KEY = "theme_mode";
 const DEBUG_STORAGE_KEY = "serial_debug_enabled";
 const NOTIFICATION_STORAGE_KEY = "notifications_enabled";
+const ESP32_IP_STORAGE_KEY = "esp32_ip_address";
 const DEFAULT_THRESHOLDS: AlertThresholds = {
   tempMin: 15,
   tempMax: 30,
@@ -37,6 +38,9 @@ export default function SettingsScreen() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
   const [debugEnabled, setDebugEnabled] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [esp32IP, setEsp32IP] = useState("192.168.1.33");
+  const [tempIP, setTempIP] = useState("");
+  const [isDiscovering, setIsDiscovering] = useState(false);
 
   // Load thresholds, theme, debug, and notification settings on mount
   useEffect(() => {
@@ -44,7 +48,71 @@ export default function SettingsScreen() {
     loadThemeMode();
     loadDebugSetting();
     loadNotificationSetting();
+    loadStoredIP();
   }, []);
+
+  const loadStoredIP = async () => {
+    try {
+      const storedIP = await AsyncStorage.getItem(ESP32_IP_STORAGE_KEY);
+      if (storedIP) {
+        setEsp32IP(storedIP);
+        setTempIP(storedIP);
+      } else {
+        setTempIP("192.168.1.33");
+      }
+    } catch (error) {
+      console.error("Error loading stored IP:", error);
+    }
+  };
+
+  const saveIP = async () => {
+    if (!tempIP.trim()) {
+      Alert.alert("Error", "Please enter an IP address or hostname");
+      return;
+    }
+    try {
+      const formattedIP = tempIP.trim().toLowerCase();
+      await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, formattedIP);
+      setEsp32IP(formattedIP);
+      Alert.alert("Success", "Connection settings saved");
+    } catch (error) {
+      Alert.alert("Error", "Failed to save connection settings");
+    }
+  };
+
+  const discoverESP32 = async () => {
+    setIsDiscovering(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch("http://sensor-dashboard.local/status", {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const discoveredIP = "sensor-dashboard.local";
+        setTempIP(discoveredIP);
+        
+        // Auto-save
+        await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, discoveredIP);
+        setEsp32IP(discoveredIP);
+        
+        Alert.alert("Discovery Successful", `Found ESP32!\n\nStatus: ${data.status || "Running"}`);
+      } else {
+        throw new Error("Invalid response");
+      }
+    } catch (error) {
+      Alert.alert(
+        "Discovery Failed", 
+        "Could not find sensor-dashboard.local on the network. Make sure your ESP32 is powered on, you are on the same WiFi network, and mDNS is supported by your router. You can still enter the IP manually."
+      );
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
 
   const loadThemeMode = async () => {
     try {
@@ -302,6 +370,61 @@ export default function SettingsScreen() {
           {/* Notification Section */}
           <View className="gap-3">
             <NotificationToggle />
+          </View>
+
+          {/* Divider */}
+          <View className="h-px bg-border" />
+
+          {/* Connection Section */}
+          <View className="gap-3">
+            <View className="flex-row items-center gap-2">
+              <MaterialIcons name="router" size={24} color={colors.primary} />
+              <Text className="text-lg font-semibold text-foreground">ESP32 Connection</Text>
+            </View>
+
+            <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
+              <View className="gap-2">
+                <Text className="text-xs text-muted font-medium">IP Address or Hostname</Text>
+                <View className="flex-row gap-2">
+                  <TextInput
+                    value={tempIP}
+                    onChangeText={setTempIP}
+                    placeholder="e.g., 192.168.1.33 or sensor-dashboard.local"
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className="flex-1 border border-border rounded-lg p-3 text-foreground"
+                    style={{ color: colors.foreground }}
+                  />
+                  <Pressable
+                    onPress={saveIP}
+                    className="bg-primary rounded-lg px-4 justify-center items-center"
+                    style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+                  >
+                    <Text className="text-white font-semibold">Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+              
+              <Pressable
+                onPress={discoverESP32}
+                disabled={isDiscovering}
+                className="bg-surface border border-primary rounded-lg p-3 items-center flex-row justify-center gap-2"
+                style={({ pressed }) => [{ opacity: isDiscovering ? 0.5 : pressed ? 0.8 : 1 }]}
+              >
+                {isDiscovering ? (
+                  <MaterialIcons name="refresh" size={20} color={colors.primary} />
+                ) : (
+                  <MaterialIcons name="radar" size={20} color={colors.primary} />
+                )}
+                <Text className="text-primary font-semibold">
+                  {isDiscovering ? "Scanning Network..." : "Auto-Discover (mDNS)"}
+                </Text>
+              </Pressable>
+              <Text className="text-xs text-muted text-center mt-1">
+                Searches for sensor-dashboard.local on your network
+              </Text>
+            </View>
           </View>
 
           {/* Divider */}
