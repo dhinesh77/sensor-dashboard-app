@@ -90,6 +90,25 @@ export default function HistoryScreen() {
     ]);
   };
 
+  const generateMockData = async () => {
+    try {
+      const now = Date.now();
+      const mockEntries: HistoryEntry[] = [];
+      for (let i = 24; i >= 0; i--) {
+        mockEntries.push({
+          timestamp: now - i * 60 * 60 * 1000,
+          temperature: 20 + Math.sin(i / 3) * 5 + Math.random() * 2,
+          humidity: 50 + Math.cos(i / 4) * 15 + Math.random() * 5,
+        });
+      }
+      await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(mockEntries));
+      setHistory(mockEntries);
+      calculateStats(mockEntries);
+    } catch (error) {
+      console.error("Error generating mock data:", error);
+    }
+  };
+
   // Downsample history entries for the chart (max ~30 points for readability)
   const getChartData = (entries: HistoryEntry[], key: "temperature" | "humidity") => {
     if (entries.length === 0) return { labels: [] as string[], data: [] as number[] };
@@ -196,6 +215,12 @@ export default function HistoryScreen() {
             </View>
             <View className="flex-row gap-3">
               <Pressable
+                onPress={generateMockData}
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+              >
+                <MaterialIcons name="add-chart" size={24} color={colors.primary} />
+              </Pressable>
+              <Pressable
                 onPress={loadHistory}
                 style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
               >
@@ -216,9 +241,17 @@ export default function HistoryScreen() {
             <View className="flex-1 items-center justify-center gap-4">
               <MaterialIcons name="history" size={48} color={colors.muted} />
               <Text className="text-lg font-semibold text-foreground">No data yet</Text>
-              <Text className="text-sm text-muted text-center">
-                Historical data will appear here as sensor readings are collected
+              <Text className="text-sm text-muted text-center max-w-xs">
+                Historical data will appear here as sensor readings are collected, or generate mock data to preview charts right now.
               </Text>
+              <Pressable
+                onPress={generateMockData}
+                className="mt-4 bg-primary px-6 py-3 rounded-xl flex-row items-center gap-2"
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+              >
+                <MaterialIcons name="add-chart" size={20} color="white" />
+                <Text className="text-white font-semibold">Generate Sample Data</Text>
+              </Pressable>
             </View>
           ) : (
             <>

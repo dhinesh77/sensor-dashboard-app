@@ -77,7 +77,8 @@ async function checkDevice(ip: string, timeoutMs: number = 1500): Promise<Discov
  * Scans common private subnets with limited concurrency
  */
 export const discoverDevices = async (
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  currentIp?: string
 ): Promise<DiscoveredDevice[]> => {
   const devices: DiscoveredDevice[] = [];
 
@@ -91,20 +92,30 @@ export const discoverDevices = async (
 
   // Try common subnets
   const subnets = ["192.168.1", "192.168.0", "10.0.0"];
+  if (currentIp) {
+    const parts = currentIp.split(".");
+    if (parts.length === 4) {
+      const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+      const others = subnets.filter((s) => s !== subnet);
+      subnets.length = 0;
+      subnets.push(subnet, ...others);
+    }
+  }
 
   for (const subnet of subnets) {
     onProgress?.(`Scanning ${subnet}.x...`);
 
-    // Scan with limited concurrency (5 at a time to avoid socket exhaustion)
+    // Scan with concurrency of 25 to complete scanning 6x faster
     const ips = Array.from({ length: 254 }, (_, i) => `${subnet}.${i + 1}`);
 
-    for (let i = 0; i < ips.length; i += 5) {
-      const batch = ips.slice(i, i + 5);
-      const results = await Promise.all(batch.map((ip) => checkDevice(ip, 1500)));
+    for (let i = 0; i < ips.length; i += 25) {
+      const batch = ips.slice(i, i + 25);
+      const results = await Promise.all(batch.map((ip) => checkDevice(ip, 1200)));
 
       for (const result of results) {
         if (result) {
           devices.push(result);
+          onProgress?.(`Found ${result.name}!`);
         }
       }
     }

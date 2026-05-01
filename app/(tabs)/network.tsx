@@ -91,7 +91,7 @@ export default function NetworkScreen() {
     try {
       const devices = await discoverDevices((message) => {
         setDiscoveryMessage(message);
-      });
+      }, esp32IP);
       setDiscoveredDevices(devices);
       
       if (devices.length === 0) {
